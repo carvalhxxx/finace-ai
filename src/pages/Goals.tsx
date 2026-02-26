@@ -151,8 +151,11 @@ export function Goals() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowForm(false)}>
           <div className="absolute inset-0 bg-black/40" />
-          <div className="relative w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ maxHeight: "92vh" }} onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-1 flex-shrink-0" />
+          <div className="relative w-full max-w-lg bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ maxHeight: "92vh", touchAction: "pan-y" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto" />
+              <button onClick={() => setShowForm(false)} className="absolute right-4 top-3 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 active:bg-gray-200">✕</button>
+            </div>
             <div className="overflow-y-auto px-6 pb-8 pt-3 space-y-5">
               <h2 className="text-base font-semibold text-gray-800">Nova meta</h2>
               <div>

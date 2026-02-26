@@ -1,0 +1,66 @@
+/* ============================================================
+   INDEX.CSS — ESTILOS GLOBAIS
+   ============================================================
+   O Tailwind funciona em 3 camadas que precisam ser importadas:
+
+   @tailwind base       → resets do HTML (margens, paddings, etc)
+   @tailwind components → classes de componentes reutilizáveis
+   @tailwind utilities  → as classes utilitárias (flex, p-4, etc)
+
+   Depois delas, adicionamos nossas customizações globais
+   usando @layer para manter a especificidade correta.
+   ============================================================ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Remove o brilho azul de tap no mobile (padrão do Android/iOS)
+     O Tailwind não remove isso por padrão */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Fonte base e antialiasing (deixa o texto mais suave nas telas
+     de alta resolução — especialmente no macOS e iOS) */
+  body {
+    @apply font-sans antialiased bg-gray-50 text-gray-900;
+  }
+
+  /* Impede que o conteúdo "pule" quando a scrollbar aparece/desaparece
+     no desktop — não afeta mobile */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /* Scrollbar mais fina e discreta no desktop */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+}
+
+@layer utilities {
+  /* Classe utilitária para respeitar a "safe area" do iPhone
+     (a área embaixo da barra de gestos / home indicator).
+     Usada na BottomNav para não sobrepor o indicador do iOS. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Oculta a scrollbar mas mantém o scroll funcionando.
+     Útil em listas horizontais de categorias, por exemplo. */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

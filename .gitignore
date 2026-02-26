@@ -1,0 +1,28 @@
+# Dependências
+node_modules/
+
+# Build
+dist/
+dist-ssr/
+
+# Variáveis de ambiente — NUNCA suba isso no git!
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+
+    /* Essas duas linhas são o que resolve o erro:
+       module: ESNext  → habilita import.meta
+       moduleResolution: bundler → modo correto para o Vite */
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+
+    /* Alias @ → src/ (usado em todos os imports como @/hooks/...) */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

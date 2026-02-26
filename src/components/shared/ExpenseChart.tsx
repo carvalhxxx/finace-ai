@@ -73,12 +73,21 @@ export function ExpenseChart({ data, totalExpense }: ExpenseChartProps) {
 
             {/* Tooltip ao tocar numa fatia */}
             <Tooltip
-              formatter={(value: number) => [formatCurrency(value), ""]}
+              formatter={(value: number | string | undefined) => {
+                const n =
+                  typeof value === "number"
+                    ? value
+                    : typeof value === "string"
+                      ? Number(value)
+                      : 0;
+
+                return [formatCurrency(Number.isFinite(n) ? n : 0), ""];
+              }}
               contentStyle={{
                 borderRadius: "12px",
-                border:       "1px solid #f3f4f6",
-                fontSize:     "12px",
-                boxShadow:    "0 4px 12px rgba(0,0,0,0.08)",
+                border: "1px solid #f3f4f6",
+                fontSize: "12px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
               }}
             />
           </PieChart>

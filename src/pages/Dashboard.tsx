@@ -10,6 +10,7 @@
 // ============================================================
 
 import { useState }                   from "react";
+import { useNavigate }                from "react-router-dom";
 import { TrendingUp, TrendingDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatCurrency, formatDate, formatMonthYear, hexToRgba } from "@/lib/utils";
 import { useTotalBalance }             from "@/hooks/useAccounts";
@@ -19,6 +20,7 @@ import { useExpenseByCategory }        from "@/hooks/useChartData";
 import { ExpenseChart }                from "@/components/shared/ExpenseChart";
 
 export function Dashboard() {
+  const navigate = useNavigate();
   // Mês visualizado — começa no mês atual, mas o usuário
   // pode navegar para meses anteriores
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -173,7 +175,7 @@ export function Dashboard() {
           <h2 className="text-sm font-semibold text-gray-800">
             Últimas transações
           </h2>
-          <button className="flex items-center gap-1 text-xs text-emerald-500 font-medium active:opacity-70">
+          <button onClick={() => navigate("/transactions")} className="flex items-center gap-1 text-xs text-emerald-500 font-medium active:opacity-70">
             Ver todas
             <ArrowRight size={12} />
           </button>
@@ -218,9 +220,17 @@ export function Dashboard() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">
-                    {tx.description}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {tx.description}
+                    </p>
+                    {/* Badge de parcela — aparece se a transação vier de um parcelamento */}
+                    {tx.installment_id && (
+                      <span className="flex-shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-500">
+                        PARC
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {tx.category?.name} · {formatDate(tx.date)}
                   </p>

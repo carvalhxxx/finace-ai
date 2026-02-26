@@ -171,8 +171,54 @@ export function useCancelInstallment() {
 }
 
 // ============================================================
-// UTILITÁRIOS
+// SINCRONIZAR PAID_COUNT
 // ============================================================
+// Atualiza o paid_count de todos os parcelamentos ativos
+// contando quantas parcelas já venceram (data <= hoje).
+// Chamado ao abrir a tela de Relatórios.
+
+export function useSyncPaidCount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date().toISOString().split("T")[0];
+
+      // Busca todos os parcelamentos do usuário
+      const { data: installments } = await supabase
+        .from("installments")
+        .select("id")
+        .eq("user_id", user.id);
+
+      if (!installments?.length) return;
+
+      // Para cada parcelamento, conta as parcelas já vencidas
+      await Promise.all(
+        installments.map(async ({ id }) => {
+          const { count } = await supabase
+            .from("transactions")
+            .select("*", { count: "exact", head: true })
+            .eq("installment_id", id)
+            .lte("date", today); // parcelas com data <= hoje
+
+          if (count !== null) {
+            await supabase
+              .from("installments")
+              .update({ paid_count: count })
+              .eq("id", id);
+          }
+        })
+      );
+    },
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
+}
 
 // Calcula o valor restante a pagar de um parcelamento
 export function remainingAmount(installment: Installment): number {

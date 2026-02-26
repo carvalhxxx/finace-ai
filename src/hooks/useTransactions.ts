@@ -74,34 +74,55 @@ export function useTransactions(month?: Date) {
 // Insere uma nova transação no banco e invalida o cache,
 // forçando a lista a recarregar com o novo dado.
 
-// Em src/hooks/useTransactions.ts
-
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
 
-  // Note o Omit: O componente não precisa mandar user_id, nós cuidamos disso aqui
   return useMutation({
-    mutationFn: async (transaction: Omit<CreateTransaction, "user_id">) => {
-      
-      // 1. Pega o usuário logado atual
+    mutationFn: async (transaction: CreateTransaction) => {
+      // Busca o usuário logado para incluir o user_id explicitamente
+      // O RLS do Supabase exige que o user_id venha no payload do INSERT
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado.");
 
-      if (!user) {
-        throw new Error("Usuário não autenticado.");
-      }
-
-      // 2. Injeta o ID do usuário no objeto antes de enviar pro banco
       const { data, error } = await supabase
         .from("transactions")
-        .insert({
-          ...transaction,
-          user_id: user.id // <--- AQUI ESTÁ A MÁGICA
-        })
+        .insert({ ...transaction, user_id: user.id })
         .select(`
           *,
           category:categories(*),
           account:accounts(*)
         `)
+        .single(); // retorna o objeto criado, não um array
+
+      if (error) throw new Error(error.message);
+      return data as Transaction;
+    },
+
+    onSuccess: () => {
+      // Invalida TODAS as queries de transações (todos os meses
+      // em cache) para garantir que os totais ficam corretos
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
+}
+
+// ============================================================
+// ATUALIZAR TRANSAÇÃO
+// ============================================================
+
+export function useUpdateTransaction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...fields
+    }: Partial<CreateTransaction> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .update(fields)
+        .eq("id", id)
+        .select(`*, category:categories(*), account:accounts(*)`)
         .single();
 
       if (error) throw new Error(error.message);

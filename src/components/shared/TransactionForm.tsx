@@ -24,13 +24,14 @@ import { cn, formatCurrency }      from "@/lib/utils";
 import { TransactionType, CategoryType } from "@/types";
 
 interface TransactionFormProps {
-  onClose: () => void;
+  onClose:    () => void;
+  onSuccess?: () => void;
 }
 
 // Opções de parcelas disponíveis
 const INSTALLMENT_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24];
 
-export function TransactionForm({ onClose }: TransactionFormProps) {
+export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
   const createTransaction  = useCreateTransaction();
   const createInstallment  = useCreateInstallment();
 
@@ -95,7 +96,7 @@ export function TransactionForm({ onClose }: TransactionFormProps) {
           date,
         });
       }
-      onClose();
+      onSuccess ? onSuccess() : onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao salvar.");
     }

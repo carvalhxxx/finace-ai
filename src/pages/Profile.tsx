@@ -14,10 +14,10 @@ import { useNavigate }           from "react-router-dom";
 import {
   User, CreditCard, Bell, Lock, LogOut,
   Plus, Trash2, Loader2, ChevronDown,
-  Check, X, Eye, EyeOff,
+  Check, X, Eye, EyeOff, Pencil,
 } from "lucide-react";
 import { useProfile, useUpdateProfile, useChangePassword, useSignOut } from "@/hooks/useProfile";
-import { useAccounts, useCreateAccount, useDeleteAccount }             from "@/hooks/useAccounts";
+import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from "@/hooks/useAccounts";
 import { useAlerts, useCreateAlert, useToggleAlert, useDeleteAlert }   from "@/hooks/useAlerts";
 import { useCategories }         from "@/hooks/useCategories";
 import { formatCurrency, getInitials, cn } from "@/lib/utils";
@@ -46,6 +46,7 @@ export function Profile() {
   const changePassword  = useChangePassword();
   const signOut         = useSignOut();
   const createAccount   = useCreateAccount();
+  const updateAccount   = useUpdateAccount();
   const deleteAccount   = useDeleteAccount();
   const createAlert     = useCreateAlert();
   const toggleAlert     = useToggleAlert();
@@ -63,6 +64,12 @@ export function Profile() {
   const [accountBalance, setAccountBalance]     = useState("");
   const [accountColor, setAccountColor]         = useState("#8b5cf6");
   const [accountError, setAccountError]         = useState<string | null>(null);
+
+  // Edição inline de conta existente
+  const [editingAccountId, setEditingAccountId]       = useState<string | null>(null);
+  const [editAccountName, setEditAccountName]         = useState("");
+  const [editAccountBalance, setEditAccountBalance]   = useState("");
+  const [editAccountColor, setEditAccountColor]       = useState("");
 
   // ── ESTADOS: ALERTA ──────────────────────────────────────
   const [showAlertForm, setShowAlertForm]   = useState(false);
@@ -107,6 +114,18 @@ export function Profile() {
       setAccountName(""); setAccountBalance(""); setAccountType("checking"); setAccountColor("#8b5cf6");
       setShowAccountForm(false);
     } catch { setAccountError("Erro ao criar conta."); }
+  };
+
+  const handleSaveAccount = async (id: string) => {
+    const balance = parseFloat(editAccountBalance.replace(",", "."));
+    if (!editAccountName.trim()) return;
+    await updateAccount.mutateAsync({
+      id,
+      name:    editAccountName.trim(),
+      balance: isNaN(balance) ? 0 : balance,
+      color:   editAccountColor,
+    });
+    setEditingAccountId(null);
   };
 
   const handleCreateAlert = async () => {
@@ -304,22 +323,86 @@ export function Profile() {
         ) : (
           <ul>
             {accounts.map((account, index) => (
-              <li key={account.id} className={cn("flex items-center gap-3 px-4 py-3", index < accounts.length - 1 && "border-b border-gray-50")}>
-                <div className="w-9 h-9 rounded-xl flex-shrink-0" style={{ backgroundColor: `${account.color}25` }}>
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: account.color }} />
+              <li key={account.id} className={cn("px-4 py-3", index < accounts.length - 1 && "border-b border-gray-50")}>
+
+                {/* Modo visualização */}
+                {editingAccountId !== account.id ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl flex-shrink-0" style={{ backgroundColor: `${account.color}25` }}>
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: account.color }} />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{account.name}</p>
+                      <p className="text-xs text-gray-400">{ACCOUNT_TYPES.find((t) => t.value === account.type)?.label}</p>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 flex-shrink-0">{formatCurrency(account.balance)}</p>
+                    <button
+                      onClick={() => {
+                        setEditingAccountId(account.id);
+                        setEditAccountName(account.name);
+                        setEditAccountBalance(String(account.balance));
+                        setEditAccountColor(account.color);
+                      }}
+                      className="p-1.5 text-gray-300 active:text-blue-400 transition-colors"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button onClick={() => deleteAccount.mutate(account.id)} className="p-1.5 text-gray-300 active:text-red-400 transition-colors">
+                      <Trash2 size={15} />
+                    </button>
                   </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{account.name}</p>
-                  <p className="text-xs text-gray-400">{ACCOUNT_TYPES.find((t) => t.value === account.type)?.label}</p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-semibold text-gray-800">{formatCurrency(account.balance)}</p>
-                </div>
-                <button onClick={() => deleteAccount.mutate(account.id)} className="p-1.5 text-gray-300 active:text-red-400 transition-colors ml-1">
-                  <Trash2 size={15} />
-                </button>
+                ) : (
+                  /* Modo edição inline */
+                  <div className="space-y-2.5">
+                    <input
+                      type="text"
+                      value={editAccountName}
+                      onChange={(e) => setEditAccountName(e.target.value)}
+                      placeholder="Nome da conta"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                      autoFocus
+                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={editAccountBalance}
+                        onChange={(e) => setEditAccountBalance(e.target.value.replace(/[^0-9.,]/g, ""))}
+                        placeholder="Saldo atual"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                      />
+                    </div>
+                    {/* Cores */}
+                    <div className="flex gap-2 flex-wrap">
+                      {ACCOUNT_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setEditAccountColor(c)}
+                          className={cn("w-7 h-7 rounded-full border-4 transition-all", editAccountColor === c ? "border-gray-400 scale-110" : "border-transparent")}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditingAccountId(null)}
+                        className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-medium"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => handleSaveAccount(account.id)}
+                        disabled={updateAccount.isPending}
+                        className="flex-[2] py-2 rounded-xl bg-emerald-500 text-white text-xs font-semibold disabled:opacity-60"
+                      >
+                        {updateAccount.isPending ? <Loader2 size={13} className="animate-spin mx-auto" /> : "Salvar"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

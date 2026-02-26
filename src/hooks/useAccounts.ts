@@ -56,6 +56,34 @@ export function useTotalBalance() {
 }
 
 // ============================================================
+// ATUALIZAR CONTA
+// ============================================================
+
+export function useUpdateAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...fields
+    }: Partial<Omit<Account, "user_id" | "created_at">> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("accounts")
+        .update(fields)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data as Account;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
+}
+
+// ============================================================
 // CRIAR CONTA
 // ============================================================
 
@@ -64,9 +92,12 @@ export function useCreateAccount() {
 
   return useMutation({
     mutationFn: async (account: CreateAccount) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado.");
+
       const { data, error } = await supabase
         .from("accounts")
-        .insert(account)
+        .insert({ ...account, user_id: user.id })
         .select()
         .single();
 

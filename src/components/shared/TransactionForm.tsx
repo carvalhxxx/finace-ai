@@ -1,93 +1,125 @@
 // ============================================================
-// TRANSACTION FORM — FORMULÁRIO DE NOVA TRANSAÇÃO
+// TRANSACTION FORM — FORMULÁRIO DE NOVA TRANSAÇÃO (atualizado)
 // ============================================================
-// Formulário completo para registrar receitas e despesas.
-// Renderizado dentro do bottom sheet do AppShell.
+// Adicionado: toggle de parcelamento
 //
-// Campos:
-//   - Tipo: Despesa / Receita (alterna as categorias)
-//   - Valor: teclado numérico amigável
-//   - Descrição: texto livre
-//   - Categoria: grade de ícones filtrada pelo tipo
-//   - Conta: lista das contas do usuário
-//   - Data: input de data (padrão = hoje)
+// Quando "Parcelar" está ativo:
+//   - O campo de data vira "Mês de início"
+//   - Aparece seletor de quantidade de parcelas
+//   - O valor exibido é por parcela
+//   - O submit chama useCreateInstallment ao invés de
+//     useCreateTransaction
 //
-// Fluxo:
-//   usuário preenche → submit → useCreateTransaction()
-//   → onSuccess: fecha o form e mostra feedback
+// Parcelamento só está disponível para Despesas — receitas
+// parceladas não fazem sentido no contexto do app.
 // ============================================================
 
-import { useState } from "react";
-import { Loader2, ChevronDown } from "lucide-react";
-import { useCreateTransaction } from "@/hooks/useTransactions";
-import { useCategoriesByType } from "@/hooks/useCategories";
-import { useAccounts } from "@/hooks/useAccounts";
-import { cn, formatCurrency } from "@/lib/utils";
+import { useState }                from "react";
+import { Loader2, ChevronDown, CreditCard } from "lucide-react";
+import { useCreateTransaction }    from "@/hooks/useTransactions";
+import { useCreateInstallment }    from "@/hooks/useInstallments";
+import { useCategoriesByType }     from "@/hooks/useCategories";
+import { useAccounts }             from "@/hooks/useAccounts";
+import { cn, formatCurrency }      from "@/lib/utils";
 import { TransactionType, CategoryType } from "@/types";
 
 interface TransactionFormProps {
-  onClose: () => void; // chamado após sucesso ou cancelamento
+  onClose: () => void;
 }
 
-export function TransactionForm({ onClose }: TransactionFormProps) {
-  const createTransaction = useCreateTransaction();
+// Opções de parcelas disponíveis
+const INSTALLMENT_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24];
 
-  // ── ESTADOS DO FORMULÁRIO ────────────────────────────────
+export function TransactionForm({ onClose }: TransactionFormProps) {
+  const createTransaction  = useCreateTransaction();
+  const createInstallment  = useCreateInstallment();
+
+  // ── ESTADOS ────────────────────────────────────────────
   const [type, setType]               = useState<CategoryType>("expense");
   const [amount, setAmount]           = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId]   = useState("");
   const [accountId, setAccountId]     = useState("");
   const [date, setDate]               = useState(
-    new Date().toISOString().split("T")[0] // hoje no formato "YYYY-MM-DD"
+    new Date().toISOString().split("T")[0]
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]             = useState<string | null>(null);
 
-  // ── DADOS DOS HOOKS ──────────────────────────────────────
+  // Estados do parcelamento
+  const [isInstallment, setIsInstallment]       = useState(false);
+  const [installmentCount, setInstallmentCount] = useState(12);
+
+  // ── DADOS ──────────────────────────────────────────────
   const { data: categories = [], isLoading: loadingCats } = useCategoriesByType(type);
   const { data: accounts   = [], isLoading: loadingAccs } = useAccounts();
 
-  // ── SUBMIT ───────────────────────────────────────────────
+  // Valor calculado por parcela (para exibição em tempo real)
+  const numericAmount    = parseFloat(amount.replace(",", ".")) || 0;
+  const perInstallment   = isInstallment && installmentCount > 0
+    ? numericAmount / installmentCount
+    : 0;
+
+  // ── SUBMIT ─────────────────────────────────────────────
   const handleSubmit = async () => {
     setError(null);
 
-    // Validações
-    const numericAmount = parseFloat(amount.replace(",", "."));
+    // Validações comuns
     if (!amount || isNaN(numericAmount) || numericAmount <= 0) {
       setError("Informe um valor válido."); return;
     }
-    if (!categoryId) { setError("Selecione uma categoria."); return; }
-    if (!accountId)  { setError("Selecione uma conta."); return; }
+    if (!categoryId)        { setError("Selecione uma categoria."); return; }
+    if (!accountId)         { setError("Selecione uma conta."); return; }
     if (!description.trim()) { setError("Informe uma descrição."); return; }
 
     try {
-      await createTransaction.mutateAsync({
-        amount:      numericAmount,
-        type:        type as TransactionType,
-        description: description.trim(),
-        category_id: categoryId,
-        account_id:  accountId,
-        date,
-      });
-      onClose(); // fecha o bottom sheet após sucesso
+      if (isInstallment) {
+        // ── FLUXO PARCELADO ────────────────────────────
+        // Cria o parcelamento pai + N transações filhas
+        await createInstallment.mutateAsync({
+          description:        description.trim(),
+          total_amount:       numericAmount,
+          installment_amount: parseFloat(perInstallment.toFixed(2)),
+          installment_count:  installmentCount,
+          category_id:        categoryId,
+          account_id:         accountId,
+          start_date:         date,
+        });
+      } else {
+        // ── FLUXO NORMAL ───────────────────────────────
+        await createTransaction.mutateAsync({
+          amount:      numericAmount,
+          type:        type as TransactionType,
+          description: description.trim(),
+          category_id: categoryId,
+          account_id:  accountId,
+          date,
+        });
+      }
+      onClose();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar transação.");
+      setError(e instanceof Error ? e.message : "Erro ao salvar.");
     }
   };
 
-  // ── RENDER ───────────────────────────────────────────────
+  const isLoading = createTransaction.isPending || createInstallment.isPending;
+
+  // ── RENDER ─────────────────────────────────────────────
   return (
     <div className="space-y-5">
 
-      {/* Título */}
       <h2 className="text-base font-semibold text-gray-800">Nova transação</h2>
 
-      {/* ── TIPO: Despesa / Receita ──────────────────────── */}
+      {/* ── TIPO: Despesa / Receita ──────────────────── */}
       <div className="flex bg-gray-100 rounded-2xl p-1">
         {(["expense", "income"] as CategoryType[]).map((t) => (
           <button
             key={t}
-            onClick={() => { setType(t); setCategoryId(""); }}
+            onClick={() => {
+              setType(t);
+              setCategoryId("");
+              // Parcelamento só para despesas
+              if (t === "income") setIsInstallment(false);
+            }}
             className={cn(
               "flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
               type === t
@@ -102,57 +134,116 @@ export function TransactionForm({ onClose }: TransactionFormProps) {
         ))}
       </div>
 
-      {/* ── VALOR ───────────────────────────────────────── */}
+      {/* ── TOGGLE PARCELAR (só para despesas) ──────── */}
+      {type === "expense" && (
+        <button
+          onClick={() => setIsInstallment(!isInstallment)}
+          className={cn(
+            "w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 transition-all",
+            isInstallment
+              ? "border-blue-400 bg-blue-50"
+              : "border-gray-100 bg-gray-50"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <CreditCard
+              size={18}
+              className={isInstallment ? "text-blue-500" : "text-gray-400"}
+            />
+            <span className={cn(
+              "text-sm font-medium",
+              isInstallment ? "text-blue-600" : "text-gray-500"
+            )}>
+              Parcelar no cartão
+            </span>
+          </div>
+
+          {/* Switch visual */}
+          <div className={cn(
+            "w-10 h-6 rounded-full transition-colors relative",
+            isInstallment ? "bg-blue-500" : "bg-gray-200"
+          )}>
+            <div className={cn(
+              "absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all",
+              isInstallment ? "left-5" : "left-1"
+            )} />
+          </div>
+        </button>
+      )}
+
+      {/* ── CAMPOS DE PARCELAMENTO (expande ao ativar) ── */}
+      {isInstallment && (
+        <div className="bg-blue-50 rounded-2xl p-4 space-y-3 border border-blue-100">
+
+          {/* Quantidade de parcelas */}
+          <div>
+            <label className="text-xs font-medium text-blue-600 mb-1.5 block">
+              Número de parcelas
+            </label>
+            <div className="relative">
+              <select
+                value={installmentCount}
+                onChange={(e) => setInstallmentCount(Number(e.target.value))}
+                className="w-full appearance-none bg-white border border-blue-200 rounded-xl px-4 py-3 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              >
+                {INSTALLMENT_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n}x</option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Preview do valor por parcela */}
+          {numericAmount > 0 && (
+            <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-blue-100">
+              <span className="text-xs text-gray-500">Valor por parcela</span>
+              <span className="text-sm font-bold text-blue-600">
+                {installmentCount}x de {formatCurrency(perInstallment)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── VALOR TOTAL ─────────────────────────────── */}
       <div>
         <label className="text-xs font-medium text-gray-500 mb-1.5 block">
-          Valor
+          {isInstallment ? "Valor total da compra" : "Valor"}
         </label>
-        {/* inputMode="decimal" abre o teclado numérico no mobile */}
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">
-            R$
-          </span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">R$</span>
           <input
             type="text"
             inputMode="decimal"
             value={amount}
-            onChange={(e) => {
-              // Permite apenas números e vírgula/ponto
-              const val = e.target.value.replace(/[^0-9.,]/g, "");
-              setAmount(val);
-            }}
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,]/g, ""))}
             placeholder="0,00"
             className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-10 pr-4 py-3.5 text-sm text-gray-800 placeholder-gray-300 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all"
           />
         </div>
       </div>
 
-      {/* ── DESCRIÇÃO ───────────────────────────────────── */}
+      {/* ── DESCRIÇÃO ───────────────────────────────── */}
       <div>
-        <label className="text-xs font-medium text-gray-500 mb-1.5 block">
-          Descrição
-        </label>
+        <label className="text-xs font-medium text-gray-500 mb-1.5 block">Descrição</label>
         <input
           type="text"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder={type === "expense" ? "Ex: Almoço, Uber, Netflix..." : "Ex: Salário, Freelance..."}
+          placeholder={isInstallment ? "Ex: iPhone 16, Notebook..." : "Ex: Almoço, Uber, Netflix..."}
           className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-sm text-gray-800 placeholder-gray-300 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all"
         />
       </div>
 
-      {/* ── CATEGORIAS ──────────────────────────────────── */}
+      {/* ── CATEGORIAS ──────────────────────────────── */}
       <div>
-        <label className="text-xs font-medium text-gray-500 mb-2 block">
-          Categoria
-        </label>
-
+        <label className="text-xs font-medium text-gray-500 mb-2 block">Categoria</label>
         {loadingCats ? (
           <div className="flex justify-center py-4">
             <Loader2 size={20} className="animate-spin text-gray-300" />
           </div>
         ) : (
-          // Grade de ícones de categoria — mais visual que um select
           <div className="grid grid-cols-4 gap-2">
             {categories.map((cat) => (
               <button
@@ -166,31 +257,23 @@ export function TransactionForm({ onClose }: TransactionFormProps) {
                 )}
               >
                 <span className="text-2xl">{cat.icon}</span>
-                <span className="text-[10px] text-gray-500 text-center leading-tight">
-                  {cat.name}
-                </span>
+                <span className="text-[10px] text-gray-500 text-center leading-tight">{cat.name}</span>
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* ── CONTA ───────────────────────────────────────── */}
+      {/* ── CONTA ───────────────────────────────────── */}
       <div>
-        <label className="text-xs font-medium text-gray-500 mb-1.5 block">
-          Conta
-        </label>
-
+        <label className="text-xs font-medium text-gray-500 mb-1.5 block">Conta</label>
         {loadingAccs ? (
           <div className="flex justify-center py-4">
             <Loader2 size={20} className="animate-spin text-gray-300" />
           </div>
         ) : accounts.length === 0 ? (
-          // Caso o usuário não tenha nenhuma conta cadastrada ainda
           <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3">
-            <p className="text-sm text-amber-600">
-              Você ainda não tem contas cadastradas. Crie uma na tela de Perfil.
-            </p>
+            <p className="text-sm text-amber-600">Você ainda não tem contas cadastradas.</p>
           </div>
         ) : (
           <div className="relative">
@@ -206,19 +289,15 @@ export function TransactionForm({ onClose }: TransactionFormProps) {
                 </option>
               ))}
             </select>
-            {/* Ícone customizado para o select (o padrão é feio) */}
-            <ChevronDown
-              size={16}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-            />
+            <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
         )}
       </div>
 
-      {/* ── DATA ────────────────────────────────────────── */}
+      {/* ── DATA / MÊS DE INÍCIO ────────────────────── */}
       <div>
         <label className="text-xs font-medium text-gray-500 mb-1.5 block">
-          Data
+          {isInstallment ? "Mês da primeira parcela" : "Data"}
         </label>
         <input
           type="date"
@@ -228,14 +307,14 @@ export function TransactionForm({ onClose }: TransactionFormProps) {
         />
       </div>
 
-      {/* ── ERRO ────────────────────────────────────────── */}
+      {/* ── ERRO ────────────────────────────────────── */}
       {error && (
         <div className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3">
           <p className="text-sm text-red-500">{error}</p>
         </div>
       )}
 
-      {/* ── BOTÕES ──────────────────────────────────────── */}
+      {/* ── BOTÕES ──────────────────────────────────── */}
       <div className="flex gap-3 pt-1">
         <button
           onClick={onClose}
@@ -243,21 +322,24 @@ export function TransactionForm({ onClose }: TransactionFormProps) {
         >
           Cancelar
         </button>
-
         <button
           onClick={handleSubmit}
-          disabled={createTransaction.isPending}
+          disabled={isLoading}
           className={cn(
-            "flex-2 flex-grow-[2] py-3.5 rounded-2xl text-sm font-semibold transition-all",
-            "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20",
+            "flex-[2] py-3.5 rounded-2xl text-sm font-semibold transition-all",
+            isInstallment
+              ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20"
+              : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20",
             "active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
-          {createTransaction.isPending ? (
+          {isLoading ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 size={16} className="animate-spin" />
               Salvando...
             </span>
+          ) : isInstallment ? (
+            `Parcelar em ${installmentCount}x`
           ) : (
             "Salvar"
           )}

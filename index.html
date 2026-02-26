@@ -1,10 +1,36 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>finance-ai</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- ── PWA: META TAGS BÁSICAS ─────────────────────────── -->
+    <title>FinanceAI</title>
+    <meta name="description" content="Seu assistente financeiro pessoal" />
+    <meta name="theme-color" content="#22c55e" />
+
+    <!-- ── PWA: META TAGS DO IOS ──────────────────────────── -->
+    <!-- Diz ao Safari que esse site pode ser instalado como app -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- Estilo da barra de status: black-translucent = transparente sobre o conteúdo -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Nome que aparece abaixo do ícone na tela inicial -->
+    <meta name="apple-mobile-web-app-title" content="FinanceAI" />
+
+    <!-- ── ÍCONES PARA IOS ─────────────────────────────────── -->
+    <!-- O iOS ignora o manifest.json e usa essas tags para os ícones -->
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png" />
+
+    <!-- Favicon padrão -->
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+
+    <!-- ── SPLASH SCREEN DO IOS ───────────────────────────── -->
+    <!-- Cor de fundo enquanto o app carrega — mesma do background_color do manifest -->
+    <style>
+      body { background-color: #111827; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

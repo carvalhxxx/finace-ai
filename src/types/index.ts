@@ -1,8 +1,5 @@
 // ============================================================
 // TIPOS GLOBAIS DA APLICAÇÃO
-// Aqui definimos as "formas" de todos os dados que vamos usar.
-// TypeScript usa isso para garantir que nunca passemos dados
-// errados para um componente ou função.
 // ============================================================
 
 // --- USUÁRIO ---
@@ -25,7 +22,7 @@ export interface Account {
   name: string;
   type: AccountType;
   balance: number;
-  color: string; // cor para identificação visual
+  color: string;
   icon?: string;
   created_at: string;
 }
@@ -38,7 +35,7 @@ export interface Category {
   id: string;
   user_id: string;
   name: string;
-  icon: string;   // emoji ou nome de ícone
+  icon: string;   // emoji
   color: string;
   type: CategoryType;
 }
@@ -55,9 +52,10 @@ export interface Transaction {
   amount: number;
   type: TransactionType;
   description: string;
-  date: string; // ISO 8601: "2024-02-26"
+  date: string;
   created_at: string;
-  // Joins opcionais (quando buscamos com dados relacionados)
+  installment_id?: string; // presente se for uma parcela
+  // Joins opcionais
   account?: Account;
   category?: Category;
 }
@@ -67,10 +65,9 @@ export interface Goal {
   id: string;
   user_id: string;
   name: string;
-  target_amount: number;   // quanto quer atingir
-  current_amount: number;  // quanto já tem
-  deadline?: string;       // data limite (opcional)
-  category_id?: string;
+  target_amount: number;
+  current_amount: number;
+  deadline?: string;
   color: string;
   icon: string;
   created_at: string;
@@ -91,14 +88,34 @@ export interface Alert {
   category?: Category;
 }
 
-// --- UTILITÁRIOS ---
-// Tipos auxiliares usados em vários lugares
+// --- PARCELAMENTO ---
+// Representa uma compra parcelada no cartão.
+// As parcelas individuais ficam em transactions com installment_id.
 
-// Para formulários: omitimos campos gerados pelo banco
+export interface Installment {
+  id:                 string;
+  user_id:            string;
+  description:        string;
+  total_amount:       number; // valor total da compra
+  installment_amount: number; // valor de cada parcela
+  installment_count:  number; // quantas parcelas no total
+  paid_count:         number; // quantas já foram pagas
+  category_id:        string;
+  account_id:         string;
+  start_date:         string; // data da primeira parcela
+  created_at:         string;
+  // Joins opcionais
+  category?: Category;
+  account?:  Account;
+}
+
+// --- UTILITÁRIOS ---
+// Tipos para formulários: omitimos campos gerados pelo banco
 export type CreateTransaction = Omit<Transaction, "id" | "user_id" | "created_at" | "account" | "category">;
-export type CreateAccount = Omit<Account, "id" | "user_id" | "created_at">;
-export type CreateCategory = Omit<Category, "id" | "user_id">;
-export type CreateGoal = Omit<Goal, "id" | "user_id" | "created_at">;
+export type CreateAccount     = Omit<Account,      "id" | "user_id" | "created_at">;
+export type CreateCategory    = Omit<Category,     "id" | "user_id">;
+export type CreateGoal        = Omit<Goal,         "id" | "user_id" | "created_at">;
+export type CreateInstallment = Omit<Installment,  "id" | "user_id" | "created_at" | "paid_count" | "category" | "account">;
 export type CreateAlert = Omit<Alert, "id" | "user_id" | "created_at" | "category">;
 
 // Resumo financeiro para o dashboard
@@ -106,5 +123,5 @@ export interface FinancialSummary {
   totalBalance: number;
   monthlyIncome: number;
   monthlyExpense: number;
-  monthlyNet: number; // receitas - despesas
+  monthlyNet: number;
 }

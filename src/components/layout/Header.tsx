@@ -41,8 +41,8 @@ export function Header() {
     // backdrop-blur-sm: efeito de vidro fosco quando o conteúdo
     // passa por baixo ao rolar — muito usado em apps iOS
     // max-w-lg + left-0/right-0: alinha com o AppShell centralizado
-    <header className="fixed top-0 left-0 right-0 z-40 h-16 bg-white/90 backdrop-blur-sm border-b border-gray-100 max-w-lg mx-auto">
-      <div className="flex items-center justify-between h-full px-4">
+    <header className="fixed top-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-sm border-b border-gray-100 max-w-lg mx-auto h-safe-top">
+      <div className="flex items-center justify-between h-16 px-4 pt-safe">
 
         {/* ── LADO ESQUERDO ──────────────────────────────────
             Telas principais → logo/ícone do app

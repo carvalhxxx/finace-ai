@@ -58,7 +58,7 @@ export function AppShell() {
           pt-16 → empurra o conteúdo para baixo do Header (h-16)
           pb-24 → empurra o conteúdo para cima da BottomNav (h-16)
                   com folga extra para o FAB que sobe acima da nav */}
-      <main className="flex-1 pt-16 pb-24 overflow-y-auto">
+      <main className="flex-1 pb-24 overflow-y-auto" style={{ paddingTop: "calc(4rem + env(safe-area-inset-top))" }}>
         {/* context passa dados e funções para as páginas filhas
             sem precisar de prop drilling ou Context API separado */}
         <Outlet context={{ openAddTransaction } satisfies AppShellContext} />

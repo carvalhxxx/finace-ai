@@ -40,6 +40,62 @@ export function useAccounts() {
 }
 
 // ============================================================
+// CONTAS COM SALDO DINÂMICO
+// ============================================================
+// Retorna cada conta com o saldo ajustado pelas transações.
+//
+// accumulates: true  → saldo = inicial + TODAS as transações
+// accumulates: false → saldo = inicial + transações do MÊS ATUAL
+//                      (zera a cada mês — ex: VR que não acumula)
+
+export function useAccountsWithBalance() {
+  const { data: accounts = [], isLoading } = useAccounts();
+
+  return useQuery({
+    queryKey: ["accounts-with-balance"],
+    enabled:  accounts.length > 0,
+
+    queryFn: async () => {
+      const now       = new Date();
+      const firstDay  = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString().split("T")[0];
+      const lastDay   = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        .toISOString().split("T")[0];
+
+      // Busca todas as transações de todos os tempos
+      const { data: allTx, error } = await supabase
+        .from("transactions")
+        .select("account_id, amount, type, date");
+
+      if (error) throw new Error(error.message);
+
+      return accounts.map((acc) => {
+        const txs = (allTx ?? []).filter((tx) => tx.account_id === acc.id);
+
+        // Para contas que não acumulam, só considera transações do mês atual
+        const relevant = acc.accumulates
+          ? txs
+          : txs.filter((tx) => tx.date >= firstDay && tx.date <= lastDay);
+
+        // Saldo = balance inicial + receitas - despesas
+        const dynamic = relevant.reduce((sum, tx) =>
+          tx.type === "income" ? sum + tx.amount : sum - tx.amount, 0
+        );
+
+        return {
+          ...acc,
+          // Para contas que não acumulam: só o dinâmico do mês
+          // Para contas que acumulam: saldo inicial + todo o histórico
+          balance: acc.accumulates
+            ? acc.balance + dynamic
+            : dynamic,
+        };
+      });
+    },
+  });
+}
+
+// ============================================================
 // SALDO TOTAL
 // ============================================================
 // Soma o saldo de todas as contas do usuário.

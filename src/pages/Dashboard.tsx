@@ -9,27 +9,29 @@
 //   - useExpenseByCategory() → dados para o gráfico
 // ============================================================
 
-import { useState }                   from "react";
-import { useNavigate }                from "react-router-dom";
+import { useState, useRef }             from "react";
+import { useNavigate }                   from "react-router-dom";
 import { TrendingUp, TrendingDown, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatCurrency, formatDate, formatMonthYear, hexToRgba } from "@/lib/utils";
-import { useTotalBalance }             from "@/hooks/useAccounts";
-import { useFinancialSummary }         from "@/hooks/useTransactions";
-import { useTransactions }             from "@/hooks/useTransactions";
-import { useExpenseByCategory }        from "@/hooks/useChartData";
-import { ExpenseChart }                from "@/components/shared/ExpenseChart";
+import { useAccountsWithBalance }        from "@/hooks/useAccounts";
+import { useFinancialSummary, useTransactions, useLatestTransactionMonth } from "@/hooks/useTransactions";
+import { useExpenseByCategory }          from "@/hooks/useChartData";
+import { ExpenseChart }                  from "@/components/shared/ExpenseChart";
 
 export function Dashboard() {
   const navigate = useNavigate();
-  // Mês visualizado — começa no mês atual, mas o usuário
-  // pode navegar para meses anteriores
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
+  // Carrossel de contas
+  const [activeAccount, setActiveAccount] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
+
   // ── DADOS DO SUPABASE ──────────────────────────────────
-  const { totalBalance, isLoading: loadingBalance }    = useTotalBalance();
-  const { summary, isLoading: loadingSummary }         = useFinancialSummary(currentMonth);
-  const { data: transactions = [], isLoading: loadingTxs } = useTransactions(currentMonth);
-  const { data: chartData, isLoading: loadingChart }   = useExpenseByCategory(currentMonth);
+  const { data: accounts = [], isLoading: loadingAccounts } = useAccountsWithBalance();
+  const { summary, isLoading: loadingSummary }              = useFinancialSummary(currentMonth);
+  const { data: transactions = [], isLoading: loadingTxs }  = useTransactions(currentMonth);
+  const { data: chartData, isLoading: loadingChart }        = useExpenseByCategory(currentMonth);
+  const { data: latestMonth }                               = useLatestTransactionMonth();
 
   // Mostra só as 5 mais recentes na lista do dashboard
   const recentTransactions = transactions.slice(0, 5);
@@ -43,14 +45,17 @@ export function Dashboard() {
   const prevMonth = () => {
     setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   };
+
   const nextMonth = () => {
-    // Não deixa avançar além do mês atual
-    const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-    if (next <= new Date()) setCurrentMonth(next);
+    setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
   };
-  const isCurrentMonth =
-    currentMonth.getMonth() === new Date().getMonth() &&
-    currentMonth.getFullYear() === new Date().getFullYear();
+
+  // Bloqueia "próximo" no mês da transação mais futura
+  // (ou mês atual se não houver transações futuras)
+  const maxMonth = latestMonth ?? new Date();
+  const isMaxMonth =
+    currentMonth.getMonth()    === maxMonth.getMonth() &&
+    currentMonth.getFullYear() === maxMonth.getFullYear();
 
   // ── RENDER ────────────────────────────────────────────
   return (
@@ -72,40 +77,97 @@ export function Dashboard() {
 
         <button
           onClick={nextMonth}
-          disabled={isCurrentMonth}
+          disabled={isMaxMonth}
           className="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm active:bg-gray-50 disabled:opacity-30"
         >
           <ChevronRight size={16} className="text-gray-500" />
         </button>
       </div>
 
-      {/* ── CARD DE SALDO TOTAL ──────────────────────────── */}
-      <div className="bg-gray-900 text-white rounded-3xl p-6 shadow-xl">
-        <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">
-          Saldo total
-        </p>
+      {/* ── CARROSSEL DE CONTAS ─────────────────────────── */}
+      <div className="relative">
 
-        {loadingBalance ? (
-          <div className="h-10 w-40 bg-gray-700 rounded-xl animate-pulse mt-1" />
-        ) : (
-          <p className="text-4xl font-bold tracking-tight">
-            {formatCurrency(totalBalance)}
-          </p>
-        )}
-
-        {/* Barra de progresso: gastos vs receitas */}
-        <div className="mt-5 mb-2">
-          <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-            <span>Gastos do mês</span>
-            <span>{spendingPercent.toFixed(0)}% da receita</span>
+        {/* Faixa deslizável */}
+        <div
+          ref={carouselRef}
+          className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1"
+          onScroll={(e) => {
+            const el    = e.currentTarget;
+            const index = Math.round(el.scrollLeft / (el.offsetWidth * 0.82 + 12));
+            setActiveAccount(index);
+          }}
+        >
+          {/* Card "Saldo Total" sempre primeiro */}
+          <div className="snap-center flex-shrink-0 w-[82%] bg-gray-900 text-white rounded-3xl p-6 shadow-xl">
+            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">Saldo total</p>
+            {loadingAccounts ? (
+              <div className="h-10 w-40 bg-gray-700 rounded-xl animate-pulse mt-1" />
+            ) : (
+              <p className="text-4xl font-bold tracking-tight">
+                {formatCurrency(accounts.reduce((s, a) => s + a.balance, 0))}
+              </p>
+            )}
+            <div className="mt-5 mb-2">
+              <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+                <span>Gastos do mês</span>
+                <span>{spendingPercent.toFixed(0)}% da receita</span>
+              </div>
+              <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-400 rounded-full transition-all duration-500" style={{ width: `${spendingPercent}%` }} />
+              </div>
+            </div>
           </div>
-          <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+
+          {/* Um card por conta */}
+          {accounts.map((account) => (
             <div
-              className="h-full bg-emerald-400 rounded-full transition-all duration-500"
-              style={{ width: `${spendingPercent}%` }}
-            />
-          </div>
+              key={account.id}
+              className="snap-center flex-shrink-0 w-[82%] rounded-3xl p-6 shadow-xl text-white"
+              style={{ backgroundColor: account.color }}
+            >
+              <p className="text-white/70 text-xs font-medium uppercase tracking-wider mb-1">
+                {account.name}
+              </p>
+              <p className="text-4xl font-bold tracking-tight">
+                {formatCurrency(account.balance)}
+              </p>
+              <div className="mt-5 flex items-center justify-between">
+                <p className="text-white/60 text-xs">
+                  {account.type === "checking"   ? "Conta Corrente" :
+                   account.type === "savings"    ? "Poupança"       :
+                   account.type === "investment" ? "Investimentos"  : "Carteira"}
+                </p>
+                {/* Mini indicador do mês */}
+                <div className="text-right">
+                  <p className="text-white/60 text-[10px]">este mês</p>
+                  <p className="text-white text-xs font-semibold">
+                    {formatMonthYear(currentMonth)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
+
+        {/* Dots indicadores */}
+        {accounts.length > 0 && (
+          <div className="flex justify-center gap-1.5 mt-3">
+            {[null, ...accounts].map((_, i) => (
+              <button
+                key={i}
+                onClick={() => {
+                  const el = carouselRef.current;
+                  if (!el) return;
+                  const cardWidth = el.offsetWidth * 0.82 + 12;
+                  el.scrollTo({ left: i * cardWidth, behavior: "smooth" });
+                }}
+                className={`h-1.5 rounded-full transition-all ${
+                  activeAccount === i ? "w-4 bg-gray-800" : "w-1.5 bg-gray-300"
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── CARDS DE RECEITA E DESPESA ─────────────────── */}

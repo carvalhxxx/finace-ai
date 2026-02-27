@@ -72,34 +72,58 @@ export function useActiveInstallments() {
 //   ...
 //   Parcela 12: R$600 em 01/01/2026
 
+// ============================================================
+// CRIAR PARCELAMENTO
+// ============================================================
+// Suporta parcelamentos já em andamento via already_paid.
+//
+// Exemplo: Notebook 12x R$300, já paguei 3
+//   already_paid = 3
+//   paid_count começa em 3
+//   Gera só as 9 parcelas restantes (meses 4 ao 12)
+//   start_date = mês da PRÓXIMA parcela a pagar
+
 export function useCreateInstallment() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (installment: CreateInstallment) => {
-      // Pega o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado.");
 
+      const alreadyPaid      = installment.already_paid ?? 0;
+      const remainingCount   = installment.installment_count - alreadyPaid;
+
+      if (remainingCount <= 0) throw new Error("Todas as parcelas já foram pagas.");
+
       // ── PASSO 1: cria o parcelamento pai ─────────────────
+      // Remove already_paid antes de enviar ao banco — esse campo
+      // não existe na tabela, é só uma propriedade do formulário
+      const { already_paid: _, ...installmentData } = installment;
+
       const { data: parent, error: parentError } = await supabase
         .from("installments")
-        .insert({ ...installment, user_id: user.id })
+        .insert({
+          ...installmentData,
+          user_id:    user.id,
+          paid_count: alreadyPaid,
+        })
         .select()
         .single();
 
       if (parentError) throw new Error(parentError.message);
 
-      // ── PASSO 2: gera as transações das parcelas ─────────
+      // ── PASSO 2: gera só as parcelas RESTANTES ───────────
       const startDate = new Date(`${installment.start_date}T12:00:00`);
 
-      // Array com uma transação por parcela
       const transactions = Array.from(
-        { length: installment.installment_count },
+        { length: remainingCount },
         (_, index) => {
-          // Calcula a data de cada parcela somando meses
           const parcelDate = new Date(startDate);
           parcelDate.setMonth(parcelDate.getMonth() + index);
+
+          // Número real da parcela considerando as já pagas
+          const parcelNumber = alreadyPaid + index + 1;
 
           return {
             user_id:        user.id,
@@ -108,23 +132,18 @@ export function useCreateInstallment() {
             installment_id: parent.id,
             amount:         installment.installment_amount,
             type:           "expense" as const,
-            // Descrição com número da parcela: "iPhone 16 (1/12)"
-            description:    `${installment.description} (${index + 1}/${installment.installment_count})`,
+            description:    `${installment.description} (${parcelNumber}/${installment.installment_count})`,
             date:           parcelDate.toISOString().split("T")[0],
           };
         }
       );
 
-      // ── PASSO 3: insere todas as parcelas de uma vez ─────
-      // Insert em batch é muito mais eficiente que N inserts
-      // individuais — uma única requisição ao banco
+      // ── PASSO 3: insere as parcelas restantes em batch ───
       const { error: txError } = await supabase
         .from("transactions")
         .insert(transactions);
 
       if (txError) {
-        // Se falhar, deleta o parcelamento pai para não ficar
-        // um registro órfão sem parcelas
         await supabase.from("installments").delete().eq("id", parent.id);
         throw new Error(txError.message);
       }
@@ -133,8 +152,8 @@ export function useCreateInstallment() {
     },
 
     onSuccess: () => {
-      // Invalida tanto parcelamentos quanto transações
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
@@ -166,6 +185,7 @@ export function useCancelInstallment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });
 }
@@ -216,6 +236,8 @@ export function useSyncPaidCount() {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });
 }

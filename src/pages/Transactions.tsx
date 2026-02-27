@@ -12,7 +12,7 @@
 import { useState, useRef }          from "react";
 import { useNavigate }                from "react-router-dom";
 import { ChevronLeft, ChevronRight, Search, Trash2, Loader2 } from "lucide-react";
-import { useTransactions, useDeleteTransaction } from "@/hooks/useTransactions";
+import { useTransactions, useDeleteTransaction, useLatestTransactionMonth } from "@/hooks/useTransactions";
 import { EditTransactionForm }        from "@/components/shared/EditTransactionForm";
 import { formatCurrency, formatDate, formatMonthYear, hexToRgba, cn } from "@/lib/utils";
 import { Transaction }                from "@/types";
@@ -31,6 +31,7 @@ export function Transactions() {
   // ── DADOS ───────────────────────────────────────────────
   const { data: transactions = [], isLoading } = useTransactions(currentMonth);
   const deleteTransaction = useDeleteTransaction();
+  const { data: latestMonth } = useLatestTransactionMonth();
 
   // ── FILTROS ─────────────────────────────────────────────
   const filtered = transactions.filter((tx) => {
@@ -52,13 +53,12 @@ export function Transactions() {
 
   // ── NAVEGAÇÃO DE MÊS ────────────────────────────────────
   const prevMonth = () => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
-  const nextMonth = () => {
-    const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-    if (next <= new Date()) setCurrentMonth(next);
-  };
-  const isCurrentMonth =
-    currentMonth.getMonth()    === new Date().getMonth() &&
-    currentMonth.getFullYear() === new Date().getFullYear();
+  const nextMonth = () => setCurrentMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+
+  const maxMonth   = latestMonth ?? new Date();
+  const isMaxMonth =
+    currentMonth.getMonth()    === maxMonth.getMonth() &&
+    currentMonth.getFullYear() === maxMonth.getFullYear();
 
   // ── RENDER ──────────────────────────────────────────────
   return (
@@ -75,7 +75,7 @@ export function Transactions() {
           <p className="text-sm font-semibold text-gray-700 capitalize">
             {formatMonthYear(currentMonth)}
           </p>
-          <button onClick={nextMonth} disabled={isCurrentMonth} className="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm active:bg-gray-50 disabled:opacity-30">
+          <button onClick={nextMonth} disabled={isMaxMonth} className="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm active:bg-gray-50 disabled:opacity-30">
             <ChevronRight size={16} className="text-gray-500" />
           </button>
         </div>

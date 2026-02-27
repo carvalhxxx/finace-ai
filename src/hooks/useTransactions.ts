@@ -99,9 +99,8 @@ export function useCreateTransaction() {
     },
 
     onSuccess: () => {
-      // Invalida TODAS as queries de transações (todos os meses
-      // em cache) para garantir que os totais ficam corretos
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });
 }
@@ -131,6 +130,7 @@ export function useUpdateTransaction() {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });
 }
@@ -147,14 +147,37 @@ export function useDeleteTransaction() {
       const { error } = await supabase
         .from("transactions")
         .delete()
-        .eq("id", id); // deleta só o registro com esse id
+        .eq("id", id);
 
       if (error) throw new Error(error.message);
     },
 
     onSuccess: () => {
-      // Assim como no create, invalida o cache após deletar
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
+    },
+  });
+}
+
+// ============================================================
+// MÊS MAIS FUTURO COM TRANSAÇÃO
+// ============================================================
+// Busca a data da transação mais futura do usuário.
+// Usado no Dashboard para saber até onde o usuário pode navegar.
+
+export function useLatestTransactionMonth() {
+  return useQuery({
+    queryKey: [...QUERY_KEY, "latest"],
+    queryFn: async (): Promise<Date> => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("date")
+        .order("date", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !data) return new Date(); // fallback: mês atual
+      return new Date(`${data.date}T12:00:00`);
     },
   });
 }

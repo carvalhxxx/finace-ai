@@ -1,9 +1,10 @@
-import { useState }               from "react";
-import { Outlet }                 from "react-router-dom";
-import { BottomNav }              from "./BottomNav";
-import { Header }                 from "./Header";
-import { TransactionForm }        from "@/components/shared/TransactionForm";
-import { useToast }               from "@/components/shared/Toast";
+import { useState, useEffect }         from "react";
+import { Outlet }                       from "react-router-dom";
+import { BottomNav }                    from "./BottomNav";
+import { Header }                       from "./Header";
+import { TransactionForm }              from "@/components/shared/TransactionForm";
+import { useToast }                     from "@/components/shared/Toast";
+import { useProcessRecurring }          from "@/hooks/useRecurring";
 
 export interface AppShellContext {
   openAddTransaction: () => void;
@@ -13,6 +14,12 @@ export interface AppShellContext {
 export function AppShell() {
   const [isAddingTransaction, setIsAddingTransaction] = useState(false);
   const { showToast, ToastContainer } = useToast();
+  const processRecurring = useProcessRecurring();
+
+  // Processa recorrências ao abrir o app
+  useEffect(() => {
+    processRecurring.mutate();
+  }, []);
 
   const openAddTransaction  = () => setIsAddingTransaction(true);
   const closeAddTransaction = () => setIsAddingTransaction(false);

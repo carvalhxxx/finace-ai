@@ -17,15 +17,38 @@ export interface Profile {
 export type AccountType = "checking" | "savings" | "investment" | "wallet";
 
 export interface Account {
-  id: string;
-  user_id: string;
-  name: string;
-  type: AccountType;
-  balance: number;
-  color: string;
-  icon?: string;
-  created_at: string;
+  id:          string;
+  user_id:     string;
+  name:        string;
+  type:        AccountType;
+  balance:     number;
+  color:       string;
+  icon?:       string;
+  accumulates: boolean; // true = saldo acumula mês a mês
+  created_at:  string;
 }
+
+// --- TRANSAÇÃO RECORRENTE ---
+// Representa uma transação que se repete todo mês automaticamente.
+// Ex: Salário, VR, Aluguel, Academia.
+
+export interface RecurringTransaction {
+  id:           string;
+  user_id:      string;
+  account_id:   string;
+  category_id:  string;
+  description:  string;
+  amount:       number;
+  type:         TransactionType;
+  day_of_month: number; // dia do mês que entra (1-31)
+  active:       boolean;
+  created_at:   string;
+  // Joins opcionais
+  category?: Category;
+  account?:  Account;
+}
+
+export type CreateRecurring = Omit<RecurringTransaction, "id" | "user_id" | "created_at" | "category" | "account">;
 
 // --- CATEGORIA ---
 // Agrupa transações: Alimentação, Transporte, Salário, etc
@@ -55,6 +78,7 @@ export interface Transaction {
   date: string;
   created_at: string;
   installment_id?: string; // presente se for uma parcela
+  recurring_id?:   string; // presente se foi gerada por recorrência
   // Joins opcionais
   account?: Account;
   category?: Category;
@@ -115,8 +139,7 @@ export type CreateTransaction = Omit<Transaction, "id" | "user_id" | "created_at
 export type CreateAccount     = Omit<Account,      "id" | "user_id" | "created_at">;
 export type CreateCategory    = Omit<Category,     "id" | "user_id">;
 export type CreateGoal        = Omit<Goal,         "id" | "user_id" | "created_at">;
-export type CreateInstallment = Omit<Installment,  "id" | "user_id" | "created_at" | "paid_count" | "category" | "account">;
-export type CreateAlert = Omit<Alert, "id" | "user_id" | "created_at" | "category">;
+export type CreateInstallment = Omit<Installment, "id" | "user_id" | "created_at" | "paid_count" | "category" | "account"> & { already_paid?: number; };
 
 // Resumo financeiro para o dashboard
 export interface FinancialSummary {

@@ -49,6 +49,7 @@ export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
   // Estados do parcelamento
   const [isInstallment, setIsInstallment]       = useState(false);
   const [installmentCount, setInstallmentCount] = useState(12);
+  const [alreadyPaid, setAlreadyPaid]           = useState(0);
 
   // ── DADOS ──────────────────────────────────────────────
   const { data: categories = [], isLoading: loadingCats } = useCategoriesByType(type);
@@ -74,13 +75,15 @@ export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
 
     try {
       if (isInstallment) {
-        // ── FLUXO PARCELADO ────────────────────────────
-        // Cria o parcelamento pai + N transações filhas
+        if (alreadyPaid >= installmentCount) {
+          setError("Parcelas já pagas não pode ser maior ou igual ao total de parcelas."); return;
+        }
         await createInstallment.mutateAsync({
           description:        description.trim(),
           total_amount:       numericAmount,
           installment_amount: parseFloat(perInstallment.toFixed(2)),
           installment_count:  installmentCount,
+          already_paid:       alreadyPaid,
           category_id:        categoryId,
           account_id:         accountId,
           start_date:         date,
@@ -298,7 +301,7 @@ export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
       {/* ── DATA / MÊS DE INÍCIO ────────────────────── */}
       <div>
         <label className="text-xs font-medium text-gray-500 mb-1.5 block">
-          {isInstallment ? "Mês da primeira parcela" : "Data"}
+          {isInstallment ? "Mês da próxima parcela a pagar" : "Data"}
         </label>
         <input
           type="date"
@@ -307,6 +310,43 @@ export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
           className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-sm text-gray-800 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all"
         />
       </div>
+
+      {/* ── PARCELAS JÁ PAGAS ────────────────────────
+          Só aparece quando parcelamento está ativo.
+          Permite cadastrar compras já em andamento.   */}
+      {isInstallment && (
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <span className="text-base">📋</span>
+            <div>
+              <p className="text-xs font-semibold text-amber-800">Compra já em andamento?</p>
+              <p className="text-[11px] text-amber-600 mt-0.5">
+                Se você já pagou algumas parcelas antes de cadastrar, informe quantas.
+              </p>
+            </div>
+          </div>
+          <div className="relative">
+            <select
+              value={alreadyPaid}
+              onChange={(e) => setAlreadyPaid(parseInt(e.target.value))}
+              className="w-full appearance-none bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+            >
+              <option value={0}>Nenhuma — começando agora</option>
+              {Array.from({ length: installmentCount - 1 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n} paga{n > 1 ? "s" : ""} — restam {installmentCount - n}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-400 pointer-events-none" />
+          </div>
+          {alreadyPaid > 0 && (
+            <p className="text-[11px] text-amber-700 font-medium">
+              ✓ Serão criadas {installmentCount - alreadyPaid} parcelas a partir do mês informado acima
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── ERRO ────────────────────────────────────── */}
       {error && (
@@ -340,7 +380,9 @@ export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
               Salvando...
             </span>
           ) : isInstallment ? (
-            `Parcelar em ${installmentCount}x`
+            alreadyPaid > 0
+              ? `Cadastrar ${installmentCount - alreadyPaid}x restantes`
+              : `Parcelar em ${installmentCount}x`
           ) : (
             "Salvar"
           )}

@@ -140,6 +140,7 @@ export type CreateAccount     = Omit<Account,      "id" | "user_id" | "created_a
 export type CreateCategory    = Omit<Category,     "id" | "user_id">;
 export type CreateGoal        = Omit<Goal,         "id" | "user_id" | "created_at">;
 export type CreateInstallment = Omit<Installment, "id" | "user_id" | "created_at" | "paid_count" | "category" | "account"> & { already_paid?: number; };
+export type CreateAlert = Omit<Alert, "id" | "user_id" | "created_at" | "category">;
 
 // Resumo financeiro para o dashboard
 export interface FinancialSummary {

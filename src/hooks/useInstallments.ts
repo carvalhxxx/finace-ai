@@ -33,7 +33,7 @@ export function useInstallments() {
         .select(`
           *,
           category:categories(*),
-          account:accounts(*)
+          account:accounts!account_id(*)
         `)
         .order("created_at", { ascending: false });
 
@@ -154,7 +154,7 @@ export function useCreateInstallment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"], exact: false });
     },
   });
 }
@@ -184,7 +184,7 @@ export function useCancelInstallment() {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });
@@ -236,7 +236,7 @@ export function useSyncPaidCount() {
 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });

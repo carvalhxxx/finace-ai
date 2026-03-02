@@ -14,18 +14,22 @@ export interface Profile {
 
 // --- CONTA BANCÁRIA ---
 // Representa uma conta real do usuário (Nubank, Carteira, etc)
-export type AccountType = "checking" | "savings" | "investment" | "wallet";
+export type AccountType = "checking" | "savings" | "investment" | "wallet" | "credit_card";
 
 export interface Account {
-  id:          string;
-  user_id:     string;
-  name:        string;
-  type:        AccountType;
-  balance:     number;
-  color:       string;
-  icon?:       string;
-  accumulates: boolean; // true = saldo acumula mês a mês
-  created_at:  string;
+  id:           string;
+  user_id:      string;
+  name:         string;
+  type:         AccountType;
+  balance:      number;
+  color:        string;
+  icon?:        string;
+  accumulates:  boolean;
+  // Campos exclusivos de cartão de crédito (null para outros tipos)
+  limit_amount?: number; // limite total do cartão
+  closing_day?:  number; // dia que a fatura fecha
+  due_day?:      number; // dia que a fatura vence
+  created_at:   string;
 }
 
 // --- TRANSAÇÃO RECORRENTE ---
@@ -86,20 +90,22 @@ export interface Category {
 export type TransactionType = "income" | "expense" | "transfer";
 
 export interface Transaction {
-  id: string;
-  user_id: string;
-  account_id: string;
-  category_id: string;
-  amount: number;
-  type: TransactionType;
-  description: string;
-  date: string;
-  created_at: string;
-  installment_id?: string; // presente se for uma parcela
-  recurring_id?:   string; // presente se foi gerada por recorrência
-  // Joins opcionais
-  account?: Account;
-  category?: Category;
+  id:              string;
+  user_id:         string;
+  account_id:      string;
+  category_id:     string;
+  amount:          number;
+  type:            TransactionType;
+  description:     string;
+  date:            string; // vencimento da fatura se crédito, data real se débito
+  purchase_date?:  string; // data real da compra (só crédito)
+  credit_card_id?: string; // cartão usado (só crédito)
+  installment_id?: string;
+  recurring_id?:   string;
+  created_at:      string;
+  account?:        Account;
+  category?:       Category;
+  credit_card?:    Account; // join do cartão
 }
 
 // --- META FINANCEIRA ---

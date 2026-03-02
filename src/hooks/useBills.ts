@@ -30,7 +30,7 @@ export function useBills() {
     queryFn: async (): Promise<Bill[]> => {
       const { data, error } = await supabase
         .from("bills")
-        .select(`*, category:categories(*), account:accounts(*)`)
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
         .order("due_date", { ascending: true });
 
       if (error) throw new Error(error.message);
@@ -76,7 +76,7 @@ export function useCreateBill() {
       const { data, error } = await supabase
         .from("bills")
         .insert({ ...bill, user_id: user.id })
-        .select(`*, category:categories(*), account:accounts(*)`)
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
         .single();
 
       if (error) throw new Error(error.message);

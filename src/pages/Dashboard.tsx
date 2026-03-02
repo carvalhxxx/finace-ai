@@ -28,7 +28,7 @@ export function Dashboard() {
 
   // ── DADOS DO SUPABASE ──────────────────────────────────
   const { data: accounts = [], isLoading: loadingAccounts } = useAccountsWithBalance();
-  const { summary, isLoading: loadingSummary }              = useFinancialSummary(currentMonth);
+  const { data: summary = { monthlyIncome: 0, monthlyExpense: 0, monthlyNet: 0 }, isLoading: loadingSummary } = useFinancialSummary(currentMonth);
   const { data: transactions = [], isLoading: loadingTxs }  = useTransactions(currentMonth);
   const { data: chartData, isLoading: loadingChart }        = useExpenseByCategory(currentMonth);
   const { data: latestMonth }                               = useLatestTransactionMonth();
@@ -97,14 +97,18 @@ export function Dashboard() {
             setActiveAccount(index);
           }}
         >
-          {/* Card "Saldo Total" sempre primeiro */}
+          {/* Card "Saldo Total" sempre primeiro — soma só contas normais */}
           <div className="snap-center flex-shrink-0 w-[82%] bg-gray-900 text-white rounded-3xl p-6 shadow-xl">
             <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">Saldo total</p>
             {loadingAccounts ? (
               <div className="h-10 w-40 bg-gray-700 rounded-xl animate-pulse mt-1" />
             ) : (
               <p className="text-4xl font-bold tracking-tight">
-                {formatCurrency(accounts.reduce((s, a) => s + a.balance, 0))}
+                {formatCurrency(
+                  accounts
+                    .filter((a) => a.type !== "credit_card")
+                    .reduce((s, a) => s + a.balance, 0)
+                )}
               </p>
             )}
             <div className="mt-5 mb-2">
@@ -128,23 +132,64 @@ export function Dashboard() {
               <p className="text-white/70 text-xs font-medium uppercase tracking-wider mb-1">
                 {account.name}
               </p>
+
+          {account.type === "credit_card" ? (
+            <>
+              {/* Fatura atual = o que já foi gasto */}
+              <p className="text-white/60 text-xs mb-1">Fatura atual</p>
               <p className="text-4xl font-bold tracking-tight">
                 {formatCurrency(account.balance)}
               </p>
-              <div className="mt-5 flex items-center justify-between">
-                <p className="text-white/60 text-xs">
-                  {account.type === "checking"   ? "Conta Corrente" :
-                   account.type === "savings"    ? "Poupança"       :
-                   account.type === "investment" ? "Investimentos"  : "Carteira"}
-                </p>
-                {/* Mini indicador do mês */}
-                <div className="text-right">
-                  <p className="text-white/60 text-[10px]">este mês</p>
-                  <p className="text-white text-xs font-semibold">
-                    {formatMonthYear(currentMonth)}
-                  </p>
+
+              {/* Barra de uso do limite */}
+              {account.limit_amount && (
+                <div className="mt-4">
+                  <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-white/70 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(
+                          (account.balance / Number(account.limit_amount)) * 100,
+                          100
+                        )}%`,
+                      }}
+                    />
+                  </div>
                 </div>
+              )}
+
+              {/* Limite disponível pequeno + info do ciclo */}
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-white/50 text-[10px]">
+                  Disponível: {formatCurrency(
+                    Math.max(Number(account.limit_amount ?? 0) - account.balance, 0)
+                  )}
+                </p>
+                <p className="text-white/50 text-[10px]">
+                  Fecha {account.closing_day} · Vence {account.due_day}
+                </p>
               </div>
+            </>
+          ) : (
+                <>
+                  <p className="text-4xl font-bold tracking-tight">
+                    {formatCurrency(account.balance)}
+                  </p>
+                  <div className="mt-5 flex items-center justify-between">
+                    <p className="text-white/60 text-xs">
+                      {account.type === "checking"   ? "Conta Corrente" :
+                       account.type === "savings"    ? "Poupança"       :
+                       account.type === "investment" ? "Investimentos"  : "Carteira"}
+                    </p>
+                    <div className="text-right">
+                      <p className="text-white/60 text-[10px]">este mês</p>
+                      <p className="text-white text-xs font-semibold">
+                        {formatMonthYear(currentMonth)}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>

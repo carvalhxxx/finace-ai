@@ -31,10 +31,11 @@ const ACCOUNT_COLORS = [
 
 // Tipos de conta
 const ACCOUNT_TYPES = [
-  { value: "checking",   label: "Conta Corrente" },
-  { value: "savings",    label: "Poupança"        },
-  { value: "investment", label: "Investimentos"   },
-  { value: "wallet",     label: "Carteira"        },
+  { value: "checking",    label: "Conta Corrente"    },
+  { value: "savings",     label: "Poupança"          },
+  { value: "investment",  label: "Investimentos"     },
+  { value: "wallet",      label: "Carteira"          },
+  { value: "credit_card", label: "Cartão de Crédito" },
 ];
 
 export function Profile() {
@@ -69,14 +70,21 @@ export function Profile() {
   const [accountBalance, setAccountBalance]     = useState("");
   const [accountColor, setAccountColor]         = useState("#8b5cf6");
   const [accountAccumulates, setAccountAccumulates] = useState(true);
+  // Campos extras — cartão de crédito
+  const [accountLimit, setAccountLimit]         = useState("");
+  const [accountClosingDay, setAccountClosingDay] = useState("1");
+  const [accountDueDay, setAccountDueDay]       = useState("10");
   const [accountError, setAccountError]         = useState<string | null>(null);
 
   // Edição inline de conta existente
-  const [editingAccountId, setEditingAccountId]         = useState<string | null>(null);
-  const [editAccountName, setEditAccountName]           = useState("");
-  const [editAccountBalance, setEditAccountBalance]     = useState("");
-  const [editAccountColor, setEditAccountColor]         = useState("");
+  const [editingAccountId, setEditingAccountId]             = useState<string | null>(null);
+  const [editAccountName, setEditAccountName]               = useState("");
+  const [editAccountBalance, setEditAccountBalance]         = useState("");
+  const [editAccountColor, setEditAccountColor]             = useState("");
   const [editAccountAccumulates, setEditAccountAccumulates] = useState(true);
+  const [editAccountLimit, setEditAccountLimit]             = useState("");
+  const [editAccountClosingDay, setEditAccountClosingDay]   = useState("1");
+  const [editAccountDueDay, setEditAccountDueDay]           = useState("10");
 
   // ── ESTADOS: RECORRÊNCIA ─────────────────────────────────
   const [showRecurringForm, setShowRecurringForm]   = useState(false);
@@ -118,33 +126,56 @@ export function Profile() {
 
   const handleCreateAccount = async () => {
     setAccountError(null);
-    const balance = parseFloat(accountBalance.replace(",", "."));
-    if (!accountName.trim())              { setAccountError("Informe o nome da conta."); return; }
-    if (accountBalance && isNaN(balance)) { setAccountError("Saldo inválido."); return; }
+    const balance      = parseFloat(accountBalance.replace(",", "."));
+    const isCreditCard = accountType === "credit_card";
+    const limit        = parseFloat(accountLimit.replace(",", "."));
+    if (!accountName.trim()) { setAccountError("Informe o nome da conta."); return; }
+    if (isCreditCard && (!accountLimit || isNaN(limit) || limit <= 0)) {
+      setAccountError("Informe o limite do cartão."); return;
+    }
+    if (!isCreditCard && accountBalance && isNaN(balance)) {
+      setAccountError("Saldo inválido."); return;
+    }
     try {
       await createAccount.mutateAsync({
-        name:        accountName.trim(),
-        type:        accountType as "checking" | "savings" | "investment" | "wallet",
-        balance:     isNaN(balance) ? 0 : balance,
-        color:       accountColor,
-        accumulates: accountAccumulates,
+        name:         accountName.trim(),
+        type:         accountType as any,
+        balance:      isCreditCard ? 0 : (isNaN(balance) ? 0 : balance),
+        color:        accountColor,
+        accumulates:  isCreditCard ? false : accountAccumulates,
+        ...(isCreditCard && {
+          limit_amount: limit,
+          closing_day:  parseInt(accountClosingDay),
+          due_day:      parseInt(accountDueDay),
+        }),
       });
       setAccountName(""); setAccountBalance(""); setAccountType("checking");
       setAccountColor("#8b5cf6"); setAccountAccumulates(true);
+      setAccountLimit(""); setAccountClosingDay("1"); setAccountDueDay("10");
       setShowAccountForm(false);
     } catch { setAccountError("Erro ao criar conta."); }
   };
 
   const handleSaveAccount = async (id: string) => {
-    const balance = parseFloat(editAccountBalance.replace(",", "."));
+    const balance      = parseFloat(editAccountBalance.replace(",", "."));
+    const isCreditCard = accounts.find((a) => a.id === id)?.type === "credit_card";
+    const limit        = parseFloat(editAccountLimit.replace(",", "."));
+
     if (!editAccountName.trim()) return;
+
     await updateAccount.mutateAsync({
       id,
-      name:        editAccountName.trim(),
-      balance:     isNaN(balance) ? 0 : balance,
-      color:       editAccountColor,
+      name: editAccountName.trim(),
+      balance: isCreditCard ? 0 : (isNaN(balance) ? 0 : balance),
+      color: editAccountColor,
       accumulates: editAccountAccumulates,
+      ...(isCreditCard && {
+        ...( !isNaN(limit) && { limit_amount: limit } ),
+        closing_day: parseInt(editAccountClosingDay),
+        due_day: parseInt(editAccountDueDay),
+      }),
     });
+
     setEditingAccountId(null);
   };
 
@@ -321,18 +352,71 @@ export function Profile() {
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
 
-            {/* Saldo inicial */}
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={accountBalance}
-                onChange={(e) => setAccountBalance(e.target.value.replace(/[^0-9.,]/g, ""))}
-                placeholder="Saldo inicial (opcional)"
-                className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
-              />
-            </div>
+            {/* Saldo inicial — só para contas normais */}
+            {accountType !== "credit_card" && (
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={accountBalance}
+                  onChange={(e) => setAccountBalance(e.target.value.replace(/[^0-9.,]/g, ""))}
+                  placeholder="Saldo inicial (opcional)"
+                  className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                />
+              </div>
+            )}
+
+            {/* Campos extras — cartão de crédito */}
+            {accountType === "credit_card" && (
+              <div className="space-y-2.5 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <p className="text-xs font-semibold text-blue-700">💳 Configuração do cartão</p>
+
+                {/* Limite */}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={accountLimit}
+                    onChange={(e) => setAccountLimit(e.target.value.replace(/[^0-9.,]/g, ""))}
+                    placeholder="Limite do cartão"
+                    className="w-full bg-white border border-blue-200 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                  />
+                </div>
+
+                {/* Dia de fechamento e vencimento lado a lado */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] text-gray-500 mb-1">Dia fechamento</p>
+                    <select
+                      value={accountClosingDay}
+                      onChange={(e) => setAccountClosingDay(e.target.value)}
+                      className="w-full bg-white border border-blue-200 rounded-xl px-2 py-2 text-sm outline-none focus:border-blue-400"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <option key={d} value={d}>Dia {d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 mb-1">Dia vencimento</p>
+                    <select
+                      value={accountDueDay}
+                      onChange={(e) => setAccountDueDay(e.target.value)}
+                      className="w-full bg-white border border-blue-200 rounded-xl px-2 py-2 text-sm outline-none focus:border-blue-400"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <option key={d} value={d}>Dia {d}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className="text-[10px] text-blue-600">
+                  Compras até dia {accountClosingDay} vencem dia {accountDueDay} do mês seguinte
+                </p>
+              </div>
+            )}
 
             {/* Cor */}
             <div>
@@ -349,23 +433,25 @@ export function Profile() {
               </div>
             </div>
 
-            {/* Toggle acumula saldo */}
-            <button
-              onClick={() => setAccountAccumulates(!accountAccumulates)}
-              className={cn("w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition-all", accountAccumulates ? "border-emerald-300 bg-emerald-50" : "border-gray-200 bg-white")}
-            >
-              <div className="text-left">
-                <p className={cn("text-xs font-medium", accountAccumulates ? "text-emerald-700" : "text-gray-600")}>
-                  Acumula saldo mês a mês
-                </p>
-                <p className="text-[10px] text-gray-400 mt-0.5">
-                  {accountAccumulates ? "O saldo que sobrar passa pro próximo mês" : "Saldo zera todo mês (ex: VR que expira)"}
-                </p>
-              </div>
-              <div className={cn("w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ml-3", accountAccumulates ? "bg-emerald-500" : "bg-gray-200")}>
-                <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", accountAccumulates ? "left-4" : "left-0.5")} />
-              </div>
-            </button>
+            {/* Toggle acumula saldo — só para contas normais */}
+            {accountType !== "credit_card" && (
+              <button
+                onClick={() => setAccountAccumulates(!accountAccumulates)}
+                className={cn("w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition-all", accountAccumulates ? "border-emerald-300 bg-emerald-50" : "border-gray-200 bg-white")}
+              >
+                <div className="text-left">
+                  <p className={cn("text-xs font-medium", accountAccumulates ? "text-emerald-700" : "text-gray-600")}>
+                    Acumula saldo mês a mês
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {accountAccumulates ? "O saldo que sobrar passa pro próximo mês" : "Saldo zera todo mês (ex: VR que expira)"}
+                  </p>
+                </div>
+                <div className={cn("w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ml-3", accountAccumulates ? "bg-emerald-500" : "bg-gray-200")}>
+                  <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", accountAccumulates ? "left-4" : "left-0.5")} />
+                </div>
+              </button>
+            )}
 
             {accountError && <p className="text-xs text-red-500">{accountError}</p>}
 
@@ -400,7 +486,11 @@ export function Profile() {
                       <p className="text-sm font-medium text-gray-800 truncate">{account.name}</p>
                       <p className="text-xs text-gray-400">{ACCOUNT_TYPES.find((t) => t.value === account.type)?.label}</p>
                     </div>
-                    <p className="text-sm font-semibold text-gray-800 flex-shrink-0">{formatCurrency(account.balance)}</p>
+                    <p className="text-sm font-semibold text-gray-800 flex-shrink-0">
+                      {account.type === "credit_card"
+                        ? formatCurrency(Number(account.limit_amount ?? 0))
+                        : formatCurrency(account.balance)}
+                    </p>
                     <button
                       onClick={() => {
                         setEditingAccountId(account.id);
@@ -408,6 +498,11 @@ export function Profile() {
                         setEditAccountBalance(String(account.balance));
                         setEditAccountColor(account.color);
                         setEditAccountAccumulates(account.accumulates ?? true);
+                        if (account.type === "credit_card") {
+                        setEditAccountLimit(String(account.limit_amount ?? ""));
+                        setEditAccountClosingDay(String(account.closing_day ?? "1"));
+                        setEditAccountDueDay(String(account.due_day ?? "10"));
+                        }
                       }}
                       className="p-1.5 text-gray-300 active:text-blue-400 transition-colors"
                     >

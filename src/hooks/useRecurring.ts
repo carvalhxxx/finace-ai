@@ -33,7 +33,7 @@ export function useRecurring() {
     queryFn: async (): Promise<RecurringTransaction[]> => {
       const { data, error } = await supabase
         .from("recurring_transactions")
-        .select(`*, category:categories(*), account:accounts(*)`)
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
         .order("day_of_month", { ascending: true });
 
       if (error) throw new Error(error.message);
@@ -57,7 +57,7 @@ export function useCreateRecurring() {
       const { data, error } = await supabase
         .from("recurring_transactions")
         .insert({ ...recurring, user_id: user.id })
-        .select(`*, category:categories(*), account:accounts(*)`)
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
         .single();
 
       if (error) throw new Error(error.message);
@@ -183,7 +183,7 @@ export function useProcessRecurring() {
 
     onSuccess: () => {
       // Invalida transações e contas para refletir os novos lançamentos
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"], exact: false });
       queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });

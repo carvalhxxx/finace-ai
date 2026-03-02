@@ -16,7 +16,7 @@
 
 import { useState }                from "react";
 import { Loader2, ChevronDown, CreditCard } from "lucide-react";
-import { useCreateTransaction }    from "@/hooks/useTransactions";
+import { useCreateTransaction, useCreateCardTransaction }    from "@/hooks/useTransactions";
 import { useCreateInstallment }    from "@/hooks/useInstallments";
 import { useCategoriesByType }     from "@/hooks/useCategories";
 import { useAccounts }             from "@/hooks/useAccounts";
@@ -33,6 +33,7 @@ const INSTALLMENT_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24];
 
 export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
   const createTransaction  = useCreateTransaction();
+  const createCardTransaction = useCreateCardTransaction();
   const createInstallment  = useCreateInstallment();
 
   // ── ESTADOS ────────────────────────────────────────────
@@ -90,14 +91,28 @@ export function TransactionForm({ onClose, onSuccess }: TransactionFormProps) {
         });
       } else {
         // ── FLUXO NORMAL ───────────────────────────────
-        await createTransaction.mutateAsync({
-          amount:      numericAmount,
-          type:        type as TransactionType,
-          description: description.trim(),
-          category_id: categoryId,
-          account_id:  accountId,
-          date,
-        });
+        const selectedAccount = accounts.find(a => a.id === accountId);
+        const isCreditCard = selectedAccount?.type === "credit_card";
+
+        if (isCreditCard) {
+          await createCardTransaction.mutateAsync({
+            credit_card_id: accountId,
+            category_id: categoryId,
+            description: description.trim(),
+            amount: numericAmount,
+            purchase_date: date, // data da compra
+            date, // por enquanto igual — depois vamos calcular vencimento
+          });
+        } else {
+          await createTransaction.mutateAsync({
+            amount: numericAmount,
+            type: type as TransactionType,
+            description: description.trim(),
+            category_id: categoryId,
+            account_id: accountId,
+            date,
+          });
+        }
       }
       onSuccess ? onSuccess() : onClose();
     } catch (e: unknown) {

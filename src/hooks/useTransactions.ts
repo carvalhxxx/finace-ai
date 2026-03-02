@@ -1,101 +1,164 @@
 // ============================================================
 // useTransactions — HOOK DE TRANSAÇÕES
 // ============================================================
-// Centraliza toda a lógica de acesso às transações:
 //
-//   useTransactions()   → lista transações do mês atual
-//   useCreateTransaction() → cria nova transação
-//   useDeleteTransaction() → deleta transação por id
+// TIPOS DE TRANSAÇÃO:
 //
-// Padrão usado: cada operação é um hook separado.
-// Isso mantém os componentes limpos — eles só chamam o hook
-// e recebem os dados/funções prontos para usar.
+// 1. Transação normal (conta corrente):
+//    account_id = conta, credit_card_id = null
+//    Afeta saldo da conta.
 //
-// TanStack Query cuida de:
-//   - Cache dos dados (não rebusca enquanto estiver fresco)
-//   - Estado de loading e error automaticamente
-//   - Invalidar o cache após criar/deletar (recarrega a lista)
+// 2. Compra no cartão:
+//    account_id = null, credit_card_id = cartão
+//    purchase_date = data da compra
+//    date = data do vencimento da fatura
+//    NÃO afeta saldo da conta corrente.
+//    Aumenta a fatura do cartão.
+//
+// 3. Pagamento de fatura:
+//    account_id = conta corrente, credit_card_id = null
+//    type = "expense", description = "Fatura [cartão]"
+//    Afeta saldo da conta. Reduz fatura (via zerar as compras).
+//
+// RESUMO FINANCEIRO:
+//   Receitas  = transactions income com account_id do mês
+//   Despesas  = transactions expense com account_id do mês
+//             + compras no cartão pela purchase_date do mês
+//             + bills não pagas com due_date no mês
+//
 // ============================================================
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Transaction, CreateTransaction } from "@/types";
 
-// Chave do cache — qualquer hook que usar essa mesma chave
-// compartilha os mesmos dados em cache. Quando invalidamos
-// essa chave após um insert, TODOS os componentes que a usam
-// recebem os dados atualizados automaticamente.
 const QUERY_KEY = ["transactions"];
 
 // ============================================================
-// BUSCAR TRANSAÇÕES
+// BUSCAR TRANSAÇÕES DO MÊS
 // ============================================================
-// Busca as transações do mês atual do usuário logado,
-// ordenadas da mais recente para a mais antiga.
-// Inclui os dados de categoria e conta via join (select *).
+// Retorna transações normais (by date) + compras no cartão
+// (by purchase_date) sem duplicatas.
 
 export function useTransactions(month?: Date) {
   const targetDate = month ?? new Date();
 
-  // Primeiro e último dia do mês alvo
   const from = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1)
-    .toISOString().split("T")[0]; // "2024-02-01"
-
+    .toISOString().split("T")[0];
   const to = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
-    .toISOString().split("T")[0]; // "2024-02-29"
+    .toISOString().split("T")[0];
 
   return useQuery({
-    // A queryKey inclui o mês — se o usuário navegar para
-    // outro mês, o cache é separado (não mistura os dados)
     queryKey: [...QUERY_KEY, from, to],
 
     queryFn: async (): Promise<Transaction[]> => {
-      const { data, error } = await supabase
+      // Transações normais (conta corrente) pelo date
+      const { data: normal, error: e1 } = await supabase
         .from("transactions")
-        .select(`
-          *,
-          category:categories(*),
-          account:accounts(*)
-        `)
-        .gte("date", from)  // maior ou igual ao primeiro dia
-        .lte("date", to)    // menor ou igual ao último dia
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
+        .not("account_id", "is", null)
+        .is("credit_card_id", null)
+        .gte("date", from)
+        .lte("date", to)
         .order("date", { ascending: false })
         .order("created_at", { ascending: false });
 
-      if (error) throw new Error(error.message);
-      return data ?? [];
+      if (e1) throw new Error(e1.message);
+
+      // Compras no cartão pela purchase_date
+      const { data: cardTx, error: e2 } = await supabase
+        .from("transactions")
+        .select(`*, category:categories(*), card:accounts!credit_card_id(*)`)
+        .not("credit_card_id", "is", null)
+        .gte("purchase_date", from)
+        .lte("purchase_date", to)
+        .order("purchase_date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (e2) throw new Error(e2.message);
+
+      // Combina e ordena pela data mais relevante
+      const all = [
+        ...(normal ?? []),
+        ...(cardTx ?? []).map((tx) => ({
+          ...tx,
+          // Normaliza: usa purchase_date como data de exibição
+          _displayDate: tx.purchase_date ?? tx.date,
+        })),
+      ];
+
+      return all.sort((a, b) => {
+        const dateA = (a as any)._displayDate ?? a.date;
+        const dateB = (b as any)._displayDate ?? b.date;
+        return dateB.localeCompare(dateA);
+      });
     },
   });
 }
 
 // ============================================================
-// CRIAR TRANSAÇÃO
+// CRIAR TRANSAÇÃO NORMAL
 // ============================================================
-// Insere uma nova transação no banco e invalida o cache,
-// forçando a lista a recarregar com o novo dado.
 
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (transaction: CreateTransaction) => {
-      // Busca o usuário logado para incluir o user_id explicitamente
-      // O RLS do Supabase exige que o user_id venha no payload do INSERT
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado.");
 
       const { data, error } = await supabase
         .from("transactions")
         .insert({ ...transaction, user_id: user.id })
-        .select(`
-          *,
-          category:categories(*),
-          account:accounts(*)
-        `)
-        .single(); // retorna o objeto criado, não um array
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
+        .single();
 
       if (error) throw new Error(error.message);
       return data as Transaction;
+    },
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY, exact: false });
+      queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
+    },
+  });
+}
+
+// ============================================================
+// CRIAR COMPRA NO CARTÃO
+// ============================================================
+// Salva com credit_card_id, account_id = null.
+// purchase_date = data da compra, date = vencimento da fatura.
+
+export function useCreateCardTransaction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (transaction: {
+      credit_card_id: string;
+      category_id: string;
+      description: string;
+      amount: number;
+      purchase_date: string; // data da compra
+      date: string;          // vencimento da fatura
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado.");
+
+      const { data, error } = await supabase
+        .from("transactions")
+        .insert({
+          ...transaction,
+          user_id: user.id,
+          account_id: null,
+          type: "expense",
+        })
+        .select(`*, category:categories(*), card:accounts!credit_card_id(*)`)
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
     },
 
     onSuccess: () => {
@@ -121,7 +184,7 @@ export function useUpdateTransaction() {
         .from("transactions")
         .update(fields)
         .eq("id", id)
-        .select(`*, category:categories(*), account:accounts(*)`)
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
         .single();
 
       if (error) throw new Error(error.message);
@@ -162,8 +225,6 @@ export function useDeleteTransaction() {
 // ============================================================
 // MÊS MAIS FUTURO COM TRANSAÇÃO
 // ============================================================
-// Busca a data da transação mais futura do usuário.
-// Usado no Dashboard para saber até onde o usuário pode navegar.
 
 export function useLatestTransactionMonth() {
   return useQuery({
@@ -176,7 +237,7 @@ export function useLatestTransactionMonth() {
         .limit(1)
         .single();
 
-      if (error || !data) return new Date(); // fallback: mês atual
+      if (error || !data) return new Date();
       return new Date(`${data.date}T12:00:00`);
     },
   });
@@ -185,26 +246,72 @@ export function useLatestTransactionMonth() {
 // ============================================================
 // RESUMO FINANCEIRO DO MÊS
 // ============================================================
-// Calcula receitas, despesas e saldo líquido a partir
-// das transações já carregadas — sem nova requisição ao banco.
+// Receitas  = transactions income (account_id) no mês
+// Despesas  = transactions expense (account_id) no mês
+//           + compras no cartão (credit_card_id) pela purchase_date
+//           + bills não pagas com due_date no mês
 
 export function useFinancialSummary(month?: Date) {
-  const { data: transactions = [], ...rest } = useTransactions(month);
+  const targetDate = month ?? new Date();
+  const from = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1)
+    .toISOString().split("T")[0];
+  const to = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
+    .toISOString().split("T")[0];
 
-  const summary = transactions.reduce(
-    (acc, tx) => {
-      if (tx.type === "income")  acc.monthlyIncome   += tx.amount;
-      if (tx.type === "expense") acc.monthlyExpense  += tx.amount;
-      return acc;
-    },
-    { monthlyIncome: 0, monthlyExpense: 0 }
-  );
+  return useQuery({
+    queryKey: [...QUERY_KEY, "summary", from, to],
+    queryFn: async () => {
 
-  return {
-    ...rest,
-    summary: {
-      ...summary,
-      monthlyNet: summary.monthlyIncome - summary.monthlyExpense,
+      // ── 1. Transações normais (conta corrente) ─────────────
+      const { data: normal, error: e1 } = await supabase
+        .from("transactions")
+        .select("amount, type")
+        .not("account_id", "is", null)
+        .is("credit_card_id", null)
+        .gte("date", from)
+        .lte("date", to);
+
+      if (e1) throw new Error(e1.message);
+
+      const monthlyIncome = (normal ?? [])
+        .filter((t) => t.type === "income")
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      const accountExpense = (normal ?? [])
+        .filter((t) => t.type === "expense")
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      // ── 2. Compras no cartão pela purchase_date ────────────
+      const { data: cardTx, error: e2 } = await supabase
+        .from("transactions")
+        .select("amount")
+        .not("credit_card_id", "is", null)
+        .gte("purchase_date", from)
+        .lte("purchase_date", to);
+
+      const cardExpense = e2
+        ? 0
+        : (cardTx ?? []).reduce((s, t) => s + Number(t.amount), 0);
+
+      // ── 3. Bills não pagas com vencimento no mês ───────────
+      const { data: unpaidBills, error: e3 } = await supabase
+        .from("bills")
+        .select("amount")
+        .eq("paid", false)
+        .gte("due_date", from)
+        .lte("due_date", to);
+
+      const billsExpense = e3
+        ? 0
+        : (unpaidBills ?? []).reduce((s, b) => s + Number(b.amount), 0);
+
+      const monthlyExpense = accountExpense + cardExpense + billsExpense;
+
+      return {
+        monthlyIncome,
+        monthlyExpense,
+        monthlyNet: monthlyIncome - monthlyExpense,
+      };
     },
-  };
+  });
 }

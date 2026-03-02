@@ -29,6 +29,7 @@ import { Goals }        from "@/pages/Goals";
 import { Profile }      from "@/pages/Profile";
 import { Login }        from "@/pages/Login";
 import { Transactions } from "@/pages/Transactions";
+import { Bills }        from "@/pages/Bills";
 
 function App() {
   return (
@@ -50,11 +51,12 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route index           element={<Dashboard />}    />
-            <Route path="reports"  element={<Reports />}      />
-            <Route path="goals"    element={<Goals />}        />
-            <Route path="profile"  element={<Profile />}      />
+            <Route index           element={<Dashboard />}       />
+            <Route path="reports"  element={<Reports />}         />
+            <Route path="goals"    element={<Goals />}           />
+            <Route path="profile"  element={<Profile />}         />
             <Route path="transactions" element={<Transactions />} />
+            <Route path="bills"    element={<Bills />}           />
           </Route>
 
           {/* Rota desconhecida → home */}

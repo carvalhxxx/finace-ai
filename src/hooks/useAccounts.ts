@@ -56,16 +56,19 @@ export function useAccountsWithBalance() {
     enabled:  accounts.length > 0,
 
     queryFn: async () => {
-      const now       = new Date();
-      const firstDay  = new Date(now.getFullYear(), now.getMonth(), 1)
+      const now      = new Date();
+      const today    = now.toISOString().split("T")[0];
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
         .toISOString().split("T")[0];
-      const lastDay   = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      const lastDay  = new Date(now.getFullYear(), now.getMonth() + 1, 0)
         .toISOString().split("T")[0];
 
-      // Busca todas as transações de todos os tempos
+      // Busca só transações até hoje — parcelas futuras não
+      // devem afetar o saldo atual da conta
       const { data: allTx, error } = await supabase
         .from("transactions")
-        .select("account_id, amount, type, date");
+        .select("account_id, amount, type, date")
+        .lte("date", today);
 
       if (error) throw new Error(error.message);
 
@@ -77,15 +80,13 @@ export function useAccountsWithBalance() {
           ? txs
           : txs.filter((tx) => tx.date >= firstDay && tx.date <= lastDay);
 
-        // Saldo = balance inicial + receitas - despesas
+        // Saldo = balance inicial + receitas - despesas (só até hoje)
         const dynamic = relevant.reduce((sum, tx) =>
           tx.type === "income" ? sum + tx.amount : sum - tx.amount, 0
         );
 
         return {
           ...acc,
-          // Para contas que não acumulam: só o dinâmico do mês
-          // Para contas que acumulam: saldo inicial + todo o histórico
           balance: acc.accumulates
             ? acc.balance + dynamic
             : dynamic,

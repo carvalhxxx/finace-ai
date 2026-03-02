@@ -50,6 +50,24 @@ export interface RecurringTransaction {
 
 export type CreateRecurring = Omit<RecurringTransaction, "id" | "user_id" | "created_at" | "category" | "account">;
 
+// --- CONTA A PAGAR ---
+export interface Bill {
+  id:          string;
+  user_id:     string;
+  account_id:  string;
+  category_id: string;
+  description: string;
+  amount:      number;
+  due_date:    string;
+  paid:        boolean;
+  paid_at?:    string;
+  created_at:  string;
+  category?:   Category;
+  account?:    Account;
+}
+
+export type CreateBill = Omit<Bill, "id" | "user_id" | "created_at" | "paid" | "paid_at" | "category" | "account">;
+
 // --- CATEGORIA ---
 // Agrupa transações: Alimentação, Transporte, Salário, etc
 export type CategoryType = "income" | "expense";
@@ -140,7 +158,6 @@ export type CreateAccount     = Omit<Account,      "id" | "user_id" | "created_a
 export type CreateCategory    = Omit<Category,     "id" | "user_id">;
 export type CreateGoal        = Omit<Goal,         "id" | "user_id" | "created_at">;
 export type CreateInstallment = Omit<Installment, "id" | "user_id" | "created_at" | "paid_count" | "category" | "account"> & { already_paid?: number; };
-export type CreateAlert = Omit<Alert, "id" | "user_id" | "created_at" | "category">;
 
 // Resumo financeiro para o dashboard
 export interface FinancialSummary {

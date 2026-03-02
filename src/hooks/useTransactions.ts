@@ -99,7 +99,7 @@ export function useCreateTransaction() {
     },
 
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY, exact: false });
       queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });
@@ -129,7 +129,7 @@ export function useUpdateTransaction() {
     },
 
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY, exact: false });
       queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });
@@ -153,7 +153,7 @@ export function useDeleteTransaction() {
     },
 
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY, exact: false });
       queryClient.invalidateQueries({ queryKey: ["accounts-with-balance"] });
     },
   });

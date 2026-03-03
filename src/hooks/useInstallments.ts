@@ -1,17 +1,6 @@
 // ============================================================
 // useInstallments — HOOK DE PARCELAMENTOS
 // ============================================================
-// Gerencia compras parceladas.
-//
-//   useInstallments()        → lista todos os parcelamentos
-//   useCreateInstallment()   → cria parcelamento + parcelas
-//   useCancelInstallment()   → cancela parcelas futuras
-//
-// A lógica mais importante está no useCreateInstallment:
-// ao criar um parcelamento de 12x, ele gera 12 transações
-// automaticamente — uma para cada mês — todas de uma vez
-// usando um único insert em batch no Supabase.
-// ============================================================
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase }            from "@/lib/supabase";
@@ -19,22 +8,13 @@ import { Installment, CreateInstallment } from "@/types";
 
 const QUERY_KEY = ["installments"];
 
-// ============================================================
-// BUSCAR PARCELAMENTOS
-// ============================================================
-
 export function useInstallments() {
   return useQuery({
     queryKey: QUERY_KEY,
-
     queryFn: async (): Promise<Installment[]> => {
       const { data, error } = await supabase
         .from("installments")
-        .select(`
-          *,
-          category:categories(*),
-          account:accounts!account_id(*)
-        `)
+        .select(`*, category:categories(*), account:accounts!account_id(*)`)
         .order("created_at", { ascending: false });
 
       if (error) throw new Error(error.message);
@@ -43,45 +23,11 @@ export function useInstallments() {
   });
 }
 
-// ============================================================
-// PARCELAMENTOS ATIVOS
-// ============================================================
-// Filtra só os parcelamentos que ainda têm parcelas a pagar.
-
 export function useActiveInstallments() {
   const { data: installments = [], ...rest } = useInstallments();
-
-  const active = installments.filter(
-    (i) => i.paid_count < i.installment_count
-  );
-
+  const active = installments.filter((i) => i.paid_count < i.installment_count);
   return { ...rest, data: active };
 }
-
-// ============================================================
-// CRIAR PARCELAMENTO
-// ============================================================
-// Fluxo:
-//   1. Insere o registro pai em installments
-//   2. Gera N objetos de transação (uma por parcela)
-//   3. Insere todas as transações em batch (um único insert)
-//
-// Exemplo: iPhone 16 — 12x de R$600 a partir de fev/2025
-//   Parcela 1: R$600 em 01/02/2025
-//   Parcela 2: R$600 em 01/03/2025
-//   ...
-//   Parcela 12: R$600 em 01/01/2026
-
-// ============================================================
-// CRIAR PARCELAMENTO
-// ============================================================
-// Suporta parcelamentos já em andamento via already_paid.
-//
-// Exemplo: Notebook 12x R$300, já paguei 3
-//   already_paid = 3
-//   paid_count começa em 3
-//   Gera só as 9 parcelas restantes (meses 4 ao 12)
-//   start_date = mês da PRÓXIMA parcela a pagar
 
 export function useCreateInstallment() {
   const queryClient = useQueryClient();
@@ -91,54 +37,44 @@ export function useCreateInstallment() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado.");
 
-      const alreadyPaid      = installment.already_paid ?? 0;
-      const remainingCount   = installment.installment_count - alreadyPaid;
+      const alreadyPaid    = installment.already_paid ?? 0;
+      const remainingCount = installment.installment_count - alreadyPaid;
 
       if (remainingCount <= 0) throw new Error("Todas as parcelas já foram pagas.");
 
-      // ── PASSO 1: cria o parcelamento pai ─────────────────
-      // Remove already_paid antes de enviar ao banco — esse campo
-      // não existe na tabela, é só uma propriedade do formulário
       const { already_paid: _, ...installmentData } = installment;
 
       const { data: parent, error: parentError } = await supabase
         .from("installments")
-        .insert({
-          ...installmentData,
-          user_id:    user.id,
-          paid_count: alreadyPaid,
-        })
+        .insert({ ...installmentData, user_id: user.id, paid_count: alreadyPaid })
         .select()
         .single();
 
       if (parentError) throw new Error(parentError.message);
 
-      // ── PASSO 2: gera só as parcelas RESTANTES ───────────
+      const isCard    = !!installment.credit_card_id;
       const startDate = new Date(`${installment.start_date}T12:00:00`);
 
-      const transactions = Array.from(
-        { length: remainingCount },
-        (_, index) => {
-          const parcelDate = new Date(startDate);
-          parcelDate.setMonth(parcelDate.getMonth() + index);
+      const transactions = Array.from({ length: remainingCount }, (_, index) => {
+        const parcelDate = new Date(startDate);
+        parcelDate.setMonth(parcelDate.getMonth() + index);
+        const parcelNumber = alreadyPaid + index + 1;
+        const dateStr = parcelDate.toISOString().split("T")[0];
 
-          // Número real da parcela considerando as já pagas
-          const parcelNumber = alreadyPaid + index + 1;
+        return {
+          user_id:         user.id,
+          account_id:      isCard ? null : installment.account_id,
+          credit_card_id:  isCard ? installment.credit_card_id : null,
+          category_id:     installment.category_id,
+          installment_id:  parent.id,
+          amount:          installment.installment_amount,
+          type:            "expense" as const,
+          description:     `${installment.description} (${parcelNumber}/${installment.installment_count})`,
+          date:            dateStr,
+          purchase_date:   isCard ? dateStr : null,
+        };
+      });
 
-          return {
-            user_id:        user.id,
-            account_id:     installment.account_id,
-            category_id:    installment.category_id,
-            installment_id: parent.id,
-            amount:         installment.installment_amount,
-            type:           "expense" as const,
-            description:    `${installment.description} (${parcelNumber}/${installment.installment_count})`,
-            date:           parcelDate.toISOString().split("T")[0],
-          };
-        }
-      );
-
-      // ── PASSO 3: insere as parcelas restantes em batch ───
       const { error: txError } = await supabase
         .from("transactions")
         .insert(transactions);
@@ -159,29 +95,20 @@ export function useCreateInstallment() {
   });
 }
 
-// ============================================================
-// CANCELAR PARCELAS FUTURAS
-// ============================================================
-// Deleta apenas as transações futuras (data > hoje),
-// mantendo as já pagas no histórico.
-// Não deleta o registro pai — fica como histórico.
-
 export function useCancelInstallment() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (installmentId: string) => {
       const today = new Date().toISOString().split("T")[0];
-
       const { error } = await supabase
         .from("transactions")
         .delete()
         .eq("installment_id", installmentId)
-        .gt("date", today); // só deleta as futuras (greater than hoje)
+        .gt("date", today);
 
       if (error) throw new Error(error.message);
     },
-
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["transactions"], exact: false });
@@ -189,13 +116,6 @@ export function useCancelInstallment() {
     },
   });
 }
-
-// ============================================================
-// SINCRONIZAR PAID_COUNT
-// ============================================================
-// Atualiza o paid_count de todos os parcelamentos ativos
-// contando quantas parcelas já venceram (data <= hoje).
-// Chamado ao abrir a tela de Relatórios.
 
 export function useSyncPaidCount() {
   const queryClient = useQueryClient();
@@ -207,7 +127,6 @@ export function useSyncPaidCount() {
 
       const today = new Date().toISOString().split("T")[0];
 
-      // Busca todos os parcelamentos do usuário
       const { data: installments } = await supabase
         .from("installments")
         .select("id")
@@ -215,14 +134,13 @@ export function useSyncPaidCount() {
 
       if (!installments?.length) return;
 
-      // Para cada parcelamento, conta as parcelas já vencidas
       await Promise.all(
         installments.map(async ({ id }) => {
           const { count } = await supabase
             .from("transactions")
             .select("*", { count: "exact", head: true })
             .eq("installment_id", id)
-            .lte("date", today); // parcelas com data <= hoje
+            .lte("date", today);
 
           if (count !== null) {
             await supabase
@@ -233,7 +151,6 @@ export function useSyncPaidCount() {
         })
       );
     },
-
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["transactions"], exact: false });
@@ -242,13 +159,10 @@ export function useSyncPaidCount() {
   });
 }
 
-// Calcula o valor restante a pagar de um parcelamento
 export function remainingAmount(installment: Installment): number {
-  const remaining = installment.installment_count - installment.paid_count;
-  return remaining * installment.installment_amount;
+  return (installment.installment_count - installment.paid_count) * installment.installment_amount;
 }
 
-// Retorna o mês/ano de término do parcelamento
 export function installmentEndDate(installment: Installment): string {
   const start = new Date(`${installment.start_date}T12:00:00`);
   start.setMonth(start.getMonth() + installment.installment_count - 1);

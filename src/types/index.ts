@@ -92,7 +92,7 @@ export type TransactionType = "income" | "expense" | "transfer";
 export interface Transaction {
   id:              string;
   user_id:         string;
-  account_id:      string;
+  account_id:      string | null; // null quando é compra no cartão
   category_id:     string;
   amount:          number;
   type:            TransactionType;
@@ -149,7 +149,8 @@ export interface Installment {
   installment_count:  number; // quantas parcelas no total
   paid_count:         number; // quantas já foram pagas
   category_id:        string;
-  account_id:         string;
+  account_id:         string | null; // null quando é parcelamento no cartão
+  credit_card_id?:    string;        // cartão usado (se for no cartão)
   start_date:         string; // data da primeira parcela
   created_at:         string;
   // Joins opcionais

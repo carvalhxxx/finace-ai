@@ -70,28 +70,16 @@ export function useTransactions(month?: Date) {
         .from("transactions")
         .select(`*, category:categories(*), card:accounts!credit_card_id(*)`)
         .not("credit_card_id", "is", null)
-        .gte("purchase_date", from)
-        .lte("purchase_date", to)
-        .order("purchase_date", { ascending: false })
+        .gte("date", from)
+        .lte("date", to)
+        .order("date", { ascending: false })
         .order("created_at", { ascending: false });
 
       if (e2) throw new Error(e2.message);
 
-      // Combina e ordena pela data mais relevante
-      const all = [
-        ...(normal ?? []),
-        ...(cardTx ?? []).map((tx) => ({
-          ...tx,
-          // Normaliza: usa purchase_date como data de exibição
-          _displayDate: tx.purchase_date ?? tx.date,
-        })),
-      ];
-
-      return all.sort((a, b) => {
-        const dateA = (a as any)._displayDate ?? a.date;
-        const dateB = (b as any)._displayDate ?? b.date;
-        return dateB.localeCompare(dateA);
-      });
+      // Combina e ordena por date (mês da fatura)
+      return [...(normal ?? []), ...(cardTx ?? [])]
+        .sort((a, b) => b.date.localeCompare(a.date));
     },
   });
 }
@@ -151,7 +139,7 @@ export function useCreateCardTransaction() {
         .insert({
           ...transaction,
           user_id: user.id,
-          account_id: null,
+          account_id: undefined,
           type: "expense",
         })
         .select(`*, category:categories(*), card:accounts!credit_card_id(*)`)
@@ -281,13 +269,13 @@ export function useFinancialSummary(month?: Date) {
         .filter((t) => t.type === "expense")
         .reduce((s, t) => s + Number(t.amount), 0);
 
-      // ── 2. Compras no cartão pela purchase_date ────────────
+      // ── 2. Compras no cartão pelo date (mês da fatura) ────────────
       const { data: cardTx, error: e2 } = await supabase
         .from("transactions")
         .select("amount")
         .not("credit_card_id", "is", null)
-        .gte("purchase_date", from)
-        .lte("purchase_date", to);
+        .gte("date", from)
+        .lte("date", to);
 
       const cardExpense = e2
         ? 0
@@ -312,6 +300,35 @@ export function useFinancialSummary(month?: Date) {
         monthlyExpense,
         monthlyNet: monthlyIncome - monthlyExpense,
       };
+    },
+  });
+}
+
+// ============================================================
+// TOTAL DE PARCELAS DO MÊS
+// ============================================================
+// Soma o valor de todas as transactions com installment_id
+// que vencem no mês (by date).
+
+export function useMonthlyInstallments(month?: Date) {
+  const targetDate = month ?? new Date();
+  const from = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1)
+    .toISOString().split("T")[0];
+  const to = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
+    .toISOString().split("T")[0];
+
+  return useQuery({
+    queryKey: [...QUERY_KEY, "installments-month", from, to],
+    queryFn: async (): Promise<number> => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("amount")
+        .not("installment_id", "is", null)
+        .gte("date", from)
+        .lte("date", to);
+
+      if (error) throw new Error(error.message);
+      return (data ?? []).reduce((s, t) => s + Number(t.amount), 0);
     },
   });
 }

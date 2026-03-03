@@ -38,7 +38,7 @@ export function EditTransactionForm({
   const [amount,      setAmount]      = useState(String(transaction.amount));
   const [description, setDescription] = useState(transaction.description);
   const [categoryId,  setCategoryId]  = useState(transaction.category_id);
-  const [accountId,   setAccountId]   = useState(transaction.account_id);
+  const [accountId,   setAccountId]   = useState(transaction.account_id ?? "");
   const [date,        setDate]        = useState(transaction.date);
   const [error,       setError]       = useState<string | null>(null);
 
@@ -54,7 +54,7 @@ export function EditTransactionForm({
       setError("Informe um valor válido."); return;
     }
     if (!categoryId)         { setError("Selecione uma categoria."); return; }
-    if (!accountId)          { setError("Selecione uma conta."); return; }
+    if (!accountId && !transaction.credit_card_id) { setError("Selecione uma conta."); return; }
     if (!description.trim()) { setError("Informe uma descrição."); return; }
 
     try {
@@ -151,8 +151,8 @@ export function EditTransactionForm({
         )}
       </div>
 
-      {/* Conta */}
-      <div>
+      {/* Conta — oculta para transações de cartão */}
+      {!transaction.credit_card_id && <div>
         <label className="text-xs font-medium text-gray-500 mb-1.5 block">Conta</label>
         {loadingAccs ? (
           <div className="flex justify-center py-4">
@@ -174,7 +174,7 @@ export function EditTransactionForm({
             <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Data */}
       <div>

@@ -16,7 +16,7 @@ import {
   useLatestTransactionMonth,
   useMonthlyInstallments,
 } from "@/hooks/useTransactions";
-import { useExpenseByCategory }     from "@/hooks/useChartData";
+import { useExpenseByCategory, useDailyBalance  }     from "@/hooks/useChartData";
 import { ExpenseChart }             from "@/components/shared/ExpenseChart";
 
 export function Dashboard() {
@@ -37,6 +37,7 @@ export function Dashboard() {
   // Mês anterior para variações
   const prevMonthDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
   const { data: prevSummary = { monthlyIncome: 0, monthlyExpense: 0, monthlyNet: 0 } } = useFinancialSummary(prevMonthDate);
+  const { data: dailyBalance = [] } = useDailyBalance(currentMonth);
 
   // Cálculos derivados
   const recentTransactions = transactions.slice(0, 5);
@@ -259,7 +260,7 @@ export function Dashboard() {
             </div>
           </div>
         ) : (
-          <ExpenseChart data={chartData ?? []} totalExpense={summary.monthlyExpense} />
+          <ExpenseChart data={chartData ?? []} dailyBalance={dailyBalance} totalExpense={summary.monthlyExpense} />
         )}
       </div>
 
